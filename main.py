@@ -17,6 +17,7 @@ def display_main():
     st.logo(f"data:image/svg+xml;base64,{svg_encoded}")
 
     # [2] 메뉴를 딕셔너리 구조로 묶어서 '사용자 이름'을 섹션 타이틀로 씁니다.
+    # 추후 상단으로 메뉴를 바꾸던지 대시보드 처럼 여러 메뉴 버튼이 아이콘처럼 나오는 방식으로 가던지 해야함.
     nav_dict = {
         f"{user_name}님 ({user_role})": [
             st.Page(announcement.show, title="공지사항", icon="📣", url_path="announcement"),
@@ -34,7 +35,8 @@ def display_main():
     if user_role == 'Admin':
         nav_dict["관리 및 설정"].append(st.Page(adduser.show, title="사용자 초대 관리", icon="💌", url_path="add_user"))
 
-    pg = st.navigation(nav_dict)    
+    pg = st.navigation(nav_dict)
+    #pg = st.navigation(nav_dict, position="top")
 
     # [3] 로그아웃은 메뉴 아래에 잘 붙습니다.
     with st.sidebar:

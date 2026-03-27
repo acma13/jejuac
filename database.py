@@ -35,6 +35,19 @@ def init_db():
                         phone TEXT,
                         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                     )''')
+        
+        # 3. TO-DO LIST 테이블 생성
+        c.execute('''CREATE TABLE IF NOT EXISTS todos (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        title TEXT NOT NULL,
+                        due_date DATE,
+                        assignee TEXT,
+                        content TEXT,
+                        attachment_url TEXT, -- 웹하드 링크 등
+                        is_completed INTEGER DEFAULT 0, -- 0:진행중, 1:완료
+                        created_by TEXT, -- 등록자 아이디
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                    )''')
 
         # [Admin] 최초 관리자 계정 생성 (없을 때만)
         c.execute("SELECT * FROM users WHERE role = 'Admin'")
@@ -177,3 +190,33 @@ def get_invited_emails():
         return cursor.fetchall()
     finally:
         conn.close()
+
+# --- [3. TO-DO LIST 관련 함수] ---
+
+def get_all_todos():
+    with get_connection() as conn:
+        # 진행 중인 항목(상단), 완료된 항목(하단) 순으로 가져오기
+        query = "SELECT * FROM todos ORDER BY is_completed ASC, due_date ASC"
+        return pd.read_sql(query, conn)
+
+def add_todo(title, due_date, assignee, content, attachment_url, created_by):
+    with get_connection() as conn:
+        c = conn.cursor()
+        c.execute('''INSERT INTO todos (title, due_date, assignee, content, attachment_url, created_by)
+                     VALUES (?, ?, ?, ?, ?, ?)''', 
+                  (title, due_date, assignee, content, attachment_url, created_by))
+        conn.commit()
+
+def update_todo(todo_id, title, due_date, assignee, content, attachment_url, is_completed):
+    with get_connection() as conn:
+        c = conn.cursor()
+        c.execute('''UPDATE todos SET title=?, due_date=?, assignee=?, content=?, 
+                     attachment_url=?, is_completed=? WHERE id=?''',
+                  (title, due_date, assignee, content, attachment_url, is_completed, todo_id))
+        conn.commit()
+
+def delete_todo(todo_id):
+    with get_connection() as conn:
+        c = conn.cursor()
+        c.execute("DELETE FROM todos WHERE id=?", (todo_id,))
+        conn.commit()
