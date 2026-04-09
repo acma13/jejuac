@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <!--
+    If you are serving your web app in a path other than the root, change the
+    href value below to reflect the base path you are serving from.
+
+    The path provided below has to start and end with a slash "/" in order for
+    it to work correctly.
+
+    For more details:
+    * https://developer.mozilla.org/en-US/docs/Web/HTML/Element/base
+
+    This is a placeholder for base href that will be replaced by the value of
+    the `--base-href` argument provided to `flutter build`.
+  -->
+  <base href="$FLUTTER_BASE_HREF">
+
+  <meta charset="UTF-8">
+  <meta content="IE=Edge" http-equiv="X-UA-Compatible">
+  <meta name="description" content="A new Flutter project.">
+
+  <!-- iOS meta tags & icons -->
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black">
+  <meta name="apple-mobile-web-app-title" content="frontend">
+  <link rel="apple-touch-icon" href="icons/Icon-192.png">
+
+  <!-- Favicon -->
+  <link rel="icon" type="image/png" href="favicon.png"/>
+
+  <title>frontend</title>
+  <link rel="manifest" href="manifest.json">
+</head>
+<body>
+  <!--
+    You can customize the "flutter_bootstrap.js" script.
+    This is useful to provide a custom configuration to the Flutter loader
+    or to give the user feedback during the initialization process.
+
+    For more details:
+    * https://docs.flutter.dev/platform-integration/web/initialization
+  -->
+  <script src="flutter_bootstrap.js" async></script>
+
+  <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-messaging-compat.js"></script>
+
+  <!-- <script>
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', function() {
+        // 플러터 패키지가 자꾸 생성하는 그 경로를 우리가 먼저 등록해버립니다.
+        navigator.serviceWorker.register('/firebase-messaging-sw.js', {
+          scope: '/firebase-cloud-messaging-push-scope' 
+        }).then(function(reg) {
+          console.log('FCM 전용 스코프 선점 성공:', reg.scope);
+        });
+
+        // 기본 루트 스코프도 하나로 통일 (기존 코드 유지 또는 수정)
+        navigator.serviceWorker.register('/firebase-messaging-sw.js', {
+          scope: '/'
+        }).then(function(reg) {
+          console.log('루트 스코프 등록 성공:', reg.scope);
+        });
+      });
+    } else {
+      console.log('이 브라우저는 서비스 워커를 지원하지 않거나, 보안 환경(HTTPS)이 아닙니다.');
+    }
+  </script> -->
+
+</body>
+</html>
