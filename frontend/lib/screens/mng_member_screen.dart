@@ -19,7 +19,7 @@ class _MngMemberScreenState extends State<MngMemberScreen> {
   // 1. 원본 데이터 (나중에 DB에서 가져올 데이터)
   List<Map<String, dynamic>> members = [];
   // 서버에서 회원 목록 가져오기
-  Future<void> fetchMembers() async {
+  Future<void> _fetchMembers() async {
     try {
       final response = await http.get(Uri.parse(Config.getMembersInfo));
       if (response.statusCode == 200) {
@@ -36,7 +36,7 @@ class _MngMemberScreenState extends State<MngMemberScreen> {
   @override
   void initState() {
     super.initState();
-    fetchMembers(); // 화면 시작하자마자 데이터 가져오기
+    _fetchMembers(); // 화면 시작하자마자 데이터 가져오기
   }
 
   // 2. 필터 및 정렬 상태 변수
@@ -100,7 +100,7 @@ class _MngMemberScreenState extends State<MngMemberScreen> {
 
     if (response.statusCode == 200) {
       Navigator.pop(context); // 팝업 닫기
-      fetchMembers(); // 목록 새로고침
+      _fetchMembers(); // 목록 새로고침
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("회원이 등록되었습니다.")));
     } else if (response.statusCode == 400) {
       // 우리가 설정한 중복 에러 처리
@@ -110,6 +110,74 @@ class _MngMemberScreenState extends State<MngMemberScreen> {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("등록 실패: 서버 오류")));
     }
   }
+
+  // 서버 수정 요청.
+  Future<void> _updateMember(Map<String, dynamic> data) async {
+    try {
+      // 보통 수정은 PUT이나 POST를 씁니다.
+      final response = await http.post(
+        Uri.parse(Config.updateMember), 
+        body: jsonEncode(data),
+        headers: {"Content-Type": "application/json"},
+      );
+
+      if (response.statusCode == 200) {
+        if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("회원정보가 수정되었습니다.")));
+        _fetchMembers(); // 🏹 목록 새로고침
+      } else {
+        debugPrint("서버 에러 내용 : ${response.body}");
+      }
+    } catch (e) {
+      debugPrint("❌ 수정 실패: $e");
+    }
+  }
+
+  // 서버 삭제 요청.
+  Future<void> _confirmDelete(dynamic memberId) async {
+    try {      
+      final response = await http.post(
+        Uri.parse(Config.deleteMember),
+        body: jsonEncode({"id": memberId}),
+        headers: {"Content-Type": "application/json"},
+      );
+
+      if (response.statusCode == 200) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("회원정보가 삭제되었습니다.")));
+          Navigator.pop(context); // 수정 창까지 닫기
+        }
+        _fetchMembers(); // 🏹 목록 새로고침
+      }
+    } catch (e) {
+      debugPrint("❌ 삭제 실패: $e");
+    }
+  }
+  // 삭제 확인 다이얼로그.
+  void _showDeleteConfirmDialog(BuildContext context, dynamic memberId) {
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: const Text("회원 삭제"),
+          content: const Text("정말 이 회원을 삭제하시겠습니까?\n삭제된 데이터는 복구할 수 없습니다."),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context), // 취소
+              child: const Text("취소", style: TextStyle(color: Colors.grey)),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+              onPressed: () async {
+                Navigator.pop(context); // 다이얼로그 닫기
+                await _confirmDelete(memberId); // 🏹 실제 삭제 API 호출
+              },
+              child: const Text("삭제", style: TextStyle(color: Colors.white)),
+            ),
+          ],
+        );
+      },
+    );
+  }  
 
   // -------------- 화면 빌드 영역 ----------------
   @override
@@ -288,38 +356,136 @@ class _MngMemberScreenState extends State<MngMemberScreen> {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
-      builder: (context) => Container(
-        padding: EdgeInsets.all(20),
-        height: MediaQuery.of(context).size.height * 0.8,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('회원 정보 수정', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
-            Divider(),
-            // 이름, 연락처, 생년월일, 클래스 입력 필드들이 들어갈 자리 (일정 수정과 동일 로직)
-            Text('이름: ${member['name']}'),
-            Text('연락처: ${member['phone']}'),
-            Text('생년월일: ${member['birth']}'),
-            Text('클래스: ${member['class']}'),
-            
-            SizedBox(height: 30),
-            Container(
-              padding: EdgeInsets.all(15),
-              color: Colors.grey[200],
-              width: double.infinity,
-              child: Text('💳 결제 정보: 개발 중인 기능입니다.', style: TextStyle(color: Colors.blueGrey)),
-            ),
-            
-            Spacer(),
-            Row(
-              children: [
-                Expanded(child: ElevatedButton(onPressed: () {}, style: ElevatedButton.styleFrom(backgroundColor: Colors.blue), child: Text('수정'))),
-                SizedBox(width: 10),
-                Expanded(child: ElevatedButton(onPressed: () {}, style: ElevatedButton.styleFrom(backgroundColor: Colors.red), child: Text('삭제'))),
-              ],
-            )
-          ],
-        ),
+      builder: (context) {
+        // 기존 데이터를 컨트롤러에 미리 채워넣습니다.
+        final nameController = TextEditingController(text: member['name']);
+        final phoneController = TextEditingController(text: member['phone']);
+        final birthController = TextEditingController(text: member['birth']);
+        String tempClass = member['class'] ?? '취미반';
+        bool tempIsActive = (member['is_active'] == 1 || member['is_active'] == true);
+
+        return StatefulBuilder( // 클래스 선택이나 스위치 작동을 위해 StatefulBuilder 사용
+          builder: (context, setModalState) {
+            return Container(
+              padding: const EdgeInsets.fromLTRB(25, 20, 25, 30), // 여백 최적화
+              height: MediaQuery.of(context).size.height * 0.85,
+              decoration: const BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.vertical(top: Radius.circular(25)),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Center(
+                    child: Container(width: 40, height: 4, decoration: BoxDecoration(color: Colors.grey[300], borderRadius: BorderRadius.circular(2))),
+                  ),
+                  const SizedBox(height: 20),
+                  const Text('회원 정보 수정', style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Colors.black87)),
+                  const SizedBox(height: 15),
+                  
+                  Expanded(
+                    child: SingleChildScrollView(
+                      child: Column(
+                        children: [
+                          _buildEditField(nameController, '이름', Icons.person),
+                          const SizedBox(height: 15),
+                          _buildEditField(phoneController, '연락처', Icons.phone, 
+                            formatters: [FilteringTextInputFormatter.digitsOnly, LengthLimitingTextInputFormatter(11), PhoneNumberFormatter()]),
+                          const SizedBox(height: 15),
+                          _buildEditField(birthController, '생년월일', Icons.cake, 
+                            formatters: [FilteringTextInputFormatter.digitsOnly, LengthLimitingTextInputFormatter(8), BirthDateFormatter()]),
+                          const SizedBox(height: 15),
+                          
+                          // 클래스 선택 드롭다운
+                          DropdownButtonFormField<String>(
+                            initialValue: tempClass,
+                            decoration: const InputDecoration(labelText: '클래스', border: OutlineInputBorder(), prefixIcon: Icon(Icons.school)),
+                            items: ['취미반', '선수반'].map((c) => DropdownMenuItem(value: c, child: Text(c))).toList(),
+                            onChanged: (val) => setModalState(() => tempClass = val!),
+                          ),
+                          const SizedBox(height: 15),
+
+                          // 활동 여부 스위치
+                          ListTile(
+                            contentPadding: EdgeInsets.zero,
+                            title: const Text('활동 여부', style: TextStyle(fontWeight: FontWeight.w500)),
+                            subtitle: Text(tempIsActive ? '현재 활동 중' : '활동 중단'),
+                            trailing: Switch(
+                              value: tempIsActive,
+                              activeThumbColor: Colors.green,
+                              onChanged: (val) => setModalState(() => tempIsActive = val),
+                            ),
+                          ),
+                          
+                          const SizedBox(height: 20),
+                          Container(
+                            padding: const EdgeInsets.all(15),
+                            decoration: BoxDecoration(color: Colors.blue.withValues(alpha: 0.05), borderRadius: BorderRadius.circular(10)),
+                            child: const Row(
+                              children: [
+                                Icon(Icons.credit_card, size: 20, color: Colors.blue),
+                                SizedBox(width: 10),
+                                Text('💳 결제 정보: 준비 중인 기능입니다.', style: TextStyle(color: Colors.blueGrey, fontSize: 13)),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  
+                  const SizedBox(height: 20),
+                  Row(
+                    children: [
+                      // 삭제 버튼 (더 신중해 보이도록 테두리 스타일)
+                      Expanded(
+                        child: OutlinedButton(
+                          onPressed: () => _showDeleteConfirmDialog(context, member['id']), 
+                          style: OutlinedButton.styleFrom(foregroundColor: Colors.red, side: const BorderSide(color: Colors.red), padding: const EdgeInsets.symmetric(vertical: 15)),
+                          child: const Text('삭제'),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      // 수정 완료 버튼
+                      Expanded(
+                        child: ElevatedButton(
+                          onPressed: () {
+                            final Map<String, dynamic> updateData = {
+                              "id": member['id'],           // 어떤 회원을 수정할지 ID는 필수!
+                              "name": nameController.text,
+                              "phone": phoneController.text,
+                              "birth": birthController.text,
+                              "member_class": tempClass,    // 아까 확인한 서버쪽 변수명과 맞춰주세요
+                              "is_active": tempIsActive,
+                            }; 
+                            _updateMember(updateData); 
+                            Navigator.pop(context);
+                          },
+                          style: ElevatedButton.styleFrom(backgroundColor: Colors.green, foregroundColor: Colors.white, padding: const EdgeInsets.symmetric(vertical: 15)),
+                          child: const Text('수정 완료'),
+                        ),
+                      ),
+                    ],
+                  )
+                ],
+              ),
+            );
+          },
+        );
+      }      
+    );
+  }
+
+  // 헬퍼 위젯: 입력 필드 생성을 도와줍니다.
+  Widget _buildEditField(TextEditingController controller, String label, IconData icon, {List<TextInputFormatter>? formatters}) {
+    return TextField(
+      controller: controller,
+      inputFormatters: formatters,
+      decoration: InputDecoration(
+        labelText: label,
+        border: const OutlineInputBorder(),
+        prefixIcon: Icon(icon),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       ),
     );
   }

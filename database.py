@@ -400,10 +400,58 @@ def get_all_members():
     with get_connection() as conn:
         try:
             c = conn.cursor()            
-            c.execute("SELECT name, phone, birth, class, is_active FROM members")
+            c.execute("SELECT id, name, phone, birth, class, is_active FROM members")
             rows = c.fetchall()
             # sqlite3.Row 객체들을 딕셔너리 리스트로 변환해서 반환합니다.
             return [dict(row) for row in rows]
         except Exception as e:
             print(f"❌ 일정 조회 실패: {e}")
             return []
+        
+# 회원 정보 업데이트
+def update_member(data):
+    with get_connection() as conn:
+        try:
+            c = conn.cursor();
+            
+            query = """
+                update members
+                set
+                    name = ?,
+                    phone = ?,
+                    birth = ?,
+                    class = ?,
+                    is_active = ?                
+                where id = ?
+            """
+
+            c.execute(query, (                
+                data.get('name'),
+                data.get('phone'),
+                data.get('birth'),
+                data.get('member_class'),
+                data.get('is_active'),                
+                data.get('id')
+            ))
+
+            conn.commit()
+            return True
+    
+        except Exception as e:
+            conn.rollback()
+            print(f"❌ 회원정보 업데이트 실패: {e}")
+            return False
+        
+# 회원정보 삭제
+def delete_member(memberId):
+    with get_connection() as conn:
+        try:
+            c = conn.cursor();
+
+            c.execute("DELETE FROM members WHERE id=?", (memberId,))
+            conn.commit()
+            return True
+        except Exception as e:
+            conn.rollback()
+            print(f"❌ 회원 삭제 실패: {e}")
+            return False

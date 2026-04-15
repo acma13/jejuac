@@ -269,7 +269,7 @@ async def api_delete_schedule(req: deleteScheduleRequest):
 
 # 회원관리 관련 API
 # 데이터 모델 정의
-class Member(BaseModel):
+class addMember(BaseModel):
     name: str
     phone: str
     birth: str
@@ -278,7 +278,7 @@ class Member(BaseModel):
     created_by : str
 
 @app.post("/api/insert_member")
-async def insert_member(req: Member):
+async def insert_member(req: addMember):
     success, message = db.insert_member(req.model_dump())
     
     if success:
@@ -293,5 +293,56 @@ async def get_members():
     memberlist = db.get_all_members()
     return memberlist
 
-# @app.post("/api/update_member")
-# @app.post("/api/delete_member")
+class modifyMember(BaseModel):
+    id: int
+    name: str
+    phone: str
+    birth: str
+    member_class: str
+    is_active: bool    
+
+# 클럽 일정 수정
+@app.post("/api/update_member")
+async def update_member(req: modifyMember):
+    try:
+               
+        # 2. 필수 값인 'id'가 있는지 확인 (제주양궁클럽의 안전장치!)
+        if not req.id:
+            return {"success": False, "message": "수정할 회원 ID가 없습니다."}
+
+        # 3. DB 업데이트 함수 호출
+        result = db.update_member(req.model_dump())
+
+        if result:
+            return {"success": True, "message": "회원정보가 성공적으로 수정되었습니다."}
+        else:
+            return {"success": False, "message": "DB 업데이트 중 오류가 발생했습니다."}
+
+    except Exception as e:
+        print(f"❌ 수정 API 에러: {e}")
+        return {"success": False, "message": str(e)}
+    
+class deleteMember(BaseModel):
+    id: int
+    
+@app.post("/api/delete_member")
+async def delete_member(req: deleteMember):
+    try:
+        # 1. 삭제할 ID 데이터 받기 {"id": "123"}
+        # data = await request.json()
+        member_id = req.id
+
+        if not member_id:
+            return {"success": False, "message": "삭제할 회원 ID가 없습니다."}
+
+        # 2. DB 삭제 함수 호출
+        result = db.delete_member(member_id)
+
+        if result:
+            return {"success": True, "message": "회원정보가 삭제되었습니다."}
+        else:
+            return {"success": False, "message": "DB 삭제 중 오류가 발생했습니다."}
+
+    except Exception as e:
+        print(f"❌ 삭제 API 에러: {e}")
+        return {"success": False, "message": str(e)}

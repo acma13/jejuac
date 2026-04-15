@@ -44,17 +44,3 @@ app.*.map.json
 /android/app/profile
 /android/app/release
 
-# 1. Firebase 관련
-firebase_admin_sdk.json
-
-# 2. Python Virtual Environment (커밋 속도 향상의 핵심)
-venv/
-__pycache__/
-*.pyc
-
-# 3. Database (로컬 테스트용 DB는 올리지 않는 것이 정석)
-*.db
-*.sqlite3
-
-# 4. Environment Variables (API 키, 비밀번호 등)
-.env
