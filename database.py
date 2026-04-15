@@ -57,7 +57,23 @@ def init_db():
             )
         """)
 
-        # 4. TO-DO LIST 테이블 생성
+        # 4. 회원관리 테이블 생성
+        c.execute("""
+            CREATE TABLE IF NOT EXISTS members (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL,
+                phone TEXT,
+                birth TEXT NOT NULL,
+                class TEXT, 
+                is_active INTEGER DEFAULT 1, 
+                created_by TEXT, 
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE(name, birth),
+                FOREIGN KEY(created_by) REFERENCES users(userid) -- 누가 등록했는지 연결
+            )
+        """)
+
+        # 5. TO-DO LIST 테이블 생성
         c.execute("""CREATE TABLE IF NOT EXISTS todos (
                         id INTEGER PRIMARY KEY AUTOINCREMENT,
                         title TEXT NOT NULL,
@@ -69,7 +85,6 @@ def init_db():
                         created_by TEXT, -- 등록자 아이디
                         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                     )""")
-        
         
 
         # [Admin] 최초 관리자 계정 생성 (없을 때만)
@@ -346,4 +361,49 @@ def delete_schedule(eventId):
             print(f"❌ 일정 삭제 실패: {e}")
             return False
 
+# --- 5. 회원관리 관련 함수 ----
+# 회원등록
+def insert_member(data):
+    with get_connection() as conn:
+        try:
+            c = conn.cursor()
             
+            query = """
+                INSERT INTO members (name, phone, birth, class, is_active, created_by)
+                VALUES (?, ?, ?, ?, ?, ?)
+            """
+            
+            c.execute(query, (
+                data.get('name'),
+                data.get('phone'),
+                data.get('birth'),
+                data.get('member_class'),
+                1 if data.get('is_active') else 0,
+                data.get('created_by')                
+            ))
+            
+            # 2. 변경사항 확정
+            conn.commit()
+            print(f"✅ 회원등록 성공: {data.get('name')}")
+            return True, "success"
+        except sqlite3.IntegrityError:
+            # 중복 에러
+            return False, "duplicate"
+        except Exception as e:
+            # 에러 발생 시 되돌리기
+            conn.rollback()
+            print(f"❌ 회원정보 저장 실패: {e}")
+            return False, str(e)        
+
+# 회원 리스트 조회
+def get_all_members():
+    with get_connection() as conn:
+        try:
+            c = conn.cursor()            
+            c.execute("SELECT name, phone, birth, class, is_active FROM members")
+            rows = c.fetchall()
+            # sqlite3.Row 객체들을 딕셔너리 리스트로 변환해서 반환합니다.
+            return [dict(row) for row in rows]
+        except Exception as e:
+            print(f"❌ 일정 조회 실패: {e}")
+            return []

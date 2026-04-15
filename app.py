@@ -1,12 +1,15 @@
 # app.py (API 서버로 전면 개조)
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
 from pydantic import BaseModel
 from contextlib import asynccontextmanager
 from typing import Optional
 import database as db
 import auth
 import re
+import os
 
 # 4. 초기화: DB 연결
 # 1. 서버가 켜질 때와 꺼질 때 할 일을 정의하는 'Lifespan' 함수
@@ -23,6 +26,20 @@ async def lifespan(app: FastAPI):
 
 # 2. FastAPI 앱 선언 시 lifespan을 연결해줍니다.
 app = FastAPI(title="제주양궁클럽 API", lifespan=lifespan, redirect_slashes=False)
+
+# ---- 플러터 빌드
+# 1. 빌드된 파일들이 있는 실제 '절대 경로'를 계산합니다.
+# 현재 app.py가 있는 위치에서 frontend/build/web 폴더를 가리킵니다.
+frontend_path = os.path.join(os.path.dirname(__file__), "frontend", "build", "web")
+
+# app = FastAPI() 바로 아래에 추가
+app.mount("/web", StaticFiles(directory=frontend_path), name="web")
+
+# 3. 메인 접속 시 index.html 반환
+@app.get("/")
+async def read_index():
+    index_path = os.path.join(frontend_path, "index.html")
+    return FileResponse(index_path)
 
 # 2. CORS 설정 (플러터 웹에서 접속 허용)
 # 다른 도메인(플러터 웹)에서 이 파이썬 서버에 접근할 수 있게 해줍니다.
@@ -248,3 +265,33 @@ async def api_delete_schedule(req: deleteScheduleRequest):
     except Exception as e:
         print(f"❌ 삭제 API 에러: {e}")
         return {"success": False, "message": str(e)}
+    
+
+# 회원관리 관련 API
+# 데이터 모델 정의
+class Member(BaseModel):
+    name: str
+    phone: str
+    birth: str
+    member_class: str
+    is_active: bool
+    created_by : str
+
+@app.post("/api/insert_member")
+async def insert_member(req: Member):
+    success, message = db.insert_member(req.model_dump())
+    
+    if success:
+        return {"status": "success"}
+    elif message == "duplicate":
+        raise HTTPException(status_code=400, detail="이미 등록된 이름과 생년월일입니다.")
+    else:
+        raise HTTPException(status_code=500, detail="DB 저장 실패")
+    
+@app.get("/api/get_members")
+async def get_members():
+    memberlist = db.get_all_members()
+    return memberlist
+
+# @app.post("/api/update_member")
+# @app.post("/api/delete_member")

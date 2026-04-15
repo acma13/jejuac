@@ -13,6 +13,7 @@ import 'package:firebase_messaging/firebase_messaging.dart';
 import 'screens/user_invite_screen.dart';
 import 'screens/profile_update_screen.dart';
 import 'screens/club_calendar_screen.dart';
+import 'screens/mng_member_screen.dart';
 import 'constants.dart';
 import 'firebase_options.dart';
 import 'config/app_config.dart';
@@ -539,9 +540,7 @@ class MainDashboard extends StatelessWidget {
                             Navigator.push(
                               context,
                               MaterialPageRoute(
-                                builder: (context) => ProfileUpdateScreen(
-                                  userId: userId
-                                ),
+                                builder: (context) => ProfileUpdateScreen(userId: userId),
                               ),
                             );     
                           }
@@ -549,12 +548,17 @@ class MainDashboard extends StatelessWidget {
                             Navigator.push(
                               context,
                               MaterialPageRoute(
-                                builder: (context) => ClubCalendarScreen(
-                                  userId: userId
-                                ),
+                                builder: (context) => ClubCalendarScreen(userId: userId),
                               ),
                             );                             
-                          } else {
+                          } else if (title == '회원 관리') {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) => MngMemberScreen(userId: userId),
+                              ),
+                            );
+                          }else {
                             // 아직 구현 안 된 메뉴들은 그냥 출력만!
                             print("$title 클릭됨 - 아직 화면이 연결되지 않았습니다.");
                             

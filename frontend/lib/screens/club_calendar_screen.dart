@@ -500,6 +500,28 @@ class _ClubCalendarScreenState extends State<ClubCalendarScreen> {
     );
   }
 
+  // 데이터 가져와서 트럭에 넣어주기 
+  List<ArcherAppointment> _getDataSource(List<dynamic> serverData) {
+    return serverData.map((item) {
+      
+      // 🏹 DB에 저장된 4280191205 같은 숫자를 가져옵니다.
+      // 만약 데이터가 String으로 오면 int.parse를 쓰고, 아니면 바로 형변환 합니다.
+      int colorValue = int.tryParse(item['color'].toString()) ?? 4281358132; // 기본값(초록)
+
+      return ArcherAppointment(
+        id: item['id'].toString(),
+        subject: item['title'] ?? '제목 없음',
+        startTime: DateTime.parse(item['start_date']),
+        endTime: DateTime.parse(item['end_date']),
+        location: item['location'] ?? '',
+        manager: item['manager'] ?? '',
+        notes: item['content'] ?? '',
+        // 🎨 숫자 값을 그대로 Color 객체로 변환!
+        color: Color(colorValue), 
+      );
+    }).toList();
+  }  
+
   // -------------------------------------------------------------------------------
   // 화면 빌드(widget build)
   // -------------------------------------------------------------------------------
@@ -661,28 +683,5 @@ class _ClubCalendarScreenState extends State<ClubCalendarScreen> {
       ),
     );
   }
-
-  // 데이터 가져와서 트럭에 넣어주기 
-  List<ArcherAppointment> _getDataSource(List<dynamic> serverData) {
-    return serverData.map((item) {
-      
-      // 🏹 DB에 저장된 4280191205 같은 숫자를 가져옵니다.
-      // 만약 데이터가 String으로 오면 int.parse를 쓰고, 아니면 바로 형변환 합니다.
-      int colorValue = int.tryParse(item['color'].toString()) ?? 4281358132; // 기본값(초록)
-
-      return ArcherAppointment(
-        id: item['id'].toString(),
-        subject: item['title'] ?? '제목 없음',
-        startTime: DateTime.parse(item['start_date']),
-        endTime: DateTime.parse(item['end_date']),
-        location: item['location'] ?? '',
-        manager: item['manager'] ?? '',
-        notes: item['content'] ?? '',
-        // 🎨 숫자 값을 그대로 Color 객체로 변환!
-        color: Color(colorValue), 
-      );
-    }).toList();
-  }
-
   
 }
