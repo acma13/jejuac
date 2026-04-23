@@ -185,8 +185,9 @@ class _MngMemberScreenState extends State<MngMemberScreen> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('회원 관리'),
-        backgroundColor: Colors.green[800],
-        elevation: 0, // 필터바와 자연스럽게 연결되도록
+        backgroundColor: const Color(0xFF166534),
+        foregroundColor: Colors.white,
+        //elevation: 0, // 필터바와 자연스럽게 연결되도록
       ),
       body: Column(
         children: [

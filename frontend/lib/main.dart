@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
+import 'package:web/web.dart' as web;
 import 'package:flutter_svg/flutter_svg.dart';
 //import 'package:intl/date_symbol_data_local.dart';
 //import 'package:flutter/foundation.dart'; // kIsWeb 사용을 위해 필요
@@ -14,6 +15,7 @@ import 'screens/user_invite_screen.dart';
 import 'screens/profile_update_screen.dart';
 import 'screens/club_calendar_screen.dart';
 import 'screens/mng_member_screen.dart';
+import 'screens/notice_screen.dart';
 import 'constants.dart';
 import 'firebase_options.dart';
 import 'config/app_config.dart';
@@ -23,42 +25,93 @@ final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin = FlutterL
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // 1. 파이어베이스 초기화 (이건 기다려야 함)
-  await Firebase.initializeApp(
-    options: DefaultFirebaseOptions.currentPlatform,
-  );
+ try {
+    // 1. 파이어베이스 초기화 (이건 기다려야 함)
+    await Firebase.initializeApp(
+      options: DefaultFirebaseOptions.currentPlatform,
+    );
+    print("✅ Firebase initialized");
 
-  // 2. 알림 권한 요청 (웹/앱 공통 필수!)
-  // 2. 권한 요청 & 구독은 '비동기'로 따로 처리 (await 삭제!)
-  _setupMessaging();
-
+    // 2. 알림 권한 요청 (웹/앱 공통 필수!)
+    // 2. 권한 요청 & 구독은 '비동기'로 따로 처리 (await 삭제!)
+    _setupMessaging().catchError((e) => print("⚠️ Messaging setup error: $e"));
+ } catch (e) {
+    print("❌ Critical initialization error: $e");
+ }
+  
   runApp(const MyApp());
 }
 
-// 별도 함수로 빼서 백그라운드에서 돌게 합니다.
-void _setupMessaging() async {
+Future<void> _setupMessaging() async {
   FirebaseMessaging messaging = FirebaseMessaging.instance;
-  
-  // 여기서 권한 물어보는 건 뒤에서 조용히 일어납니다.
-  await messaging.requestPermission(
-    alert: true,
-    badge: true,
-    sound: true,
-  );
 
-  // 1. 웹에서는 토픽 구독 대신 '토큰'을 가져와야 합니다!
-  String? token = await messaging.getToken(
-    // 파이어베이스 콘솔 -> 설정 -> 클라우드 메시징에서 확인 가능
-    vapidKey: AppConfig.vapidKey,
-  );
-  
-  print("내 기기 토큰: $token"); // 👈 이 토큰을 복사해서 파이썬에 넣을 겁니다.
+  // 1. 현재 권한 상태를 먼저 확인 (팝업 안 뜸)
+  NotificationSettings currentSettings = await messaging.getNotificationSettings();
 
-  // if (settings.authorizationStatus == AuthorizationStatus.authorized) {
-  //   print('알림 권한 승인됨! 🎉');
-  //   await messaging.subscribeToTopic("club_all");
-  //   print("제주양궁클럽 공통 알림 채널 구독 성공! 🏹");
-  // }
+  // 2. 결정되지 않았을 때만 권한 요청 팝업을 띄움
+  if (currentSettings.authorizationStatus == AuthorizationStatus.notDetermined) {
+    print("🔔 권한 결정 전: 팝업을 띄웁니다.");
+    currentSettings = await messaging.requestPermission(
+      alert: true,
+      badge: true,
+      sound: true,
+    );
+  }
+
+  // 3. 허용된 상태라면 토큰 작업 진행
+  if (currentSettings.authorizationStatus == AuthorizationStatus.authorized) {
+    print("✅ 알림 권한이 허용된 상태입니다.");
+    String? token = await messaging.getToken(vapidKey: AppConfig.vapidKey);
+    print("토큰 값 : $token");
+    
+    if (token != null) {
+      await registerTokenWithServer(token);
+    }
+
+    // await FirebaseMessaging.instance.subscribeToTopic(AppConfig.topicName); // subscribeToTopic 은 모바일용!!
+    // print("✅ 'club_all' 토픽 구독 완료!");
+
+    // [포그라운드 리스너] - 앱 켜져 있을 때도 알림을 띄워주는 감시자
+    FirebaseMessaging.onMessage.listen((RemoteMessage message) {
+      print("🔔 포그라운드 메시지 수신: ${message.notification?.title}");
+
+      if (message.notification != null) {
+        // 앱이 켜져 있어도 시스템 알림을 강제로 호출 (중복 방지 로직은 브라우저가 처리)
+        web.Notification(
+          message.notification!.title ?? '제주양궁클럽',
+          web.NotificationOptions(
+            body: message.notification!.body ?? '',
+            icon: '/icons/bow-and-arrow.png',
+            tag: 'jejuac-notification',
+          ),
+        );
+      }
+    });
+  } else {
+    print("🚫 알림 권한이 거부되었거나 제한됨");
+  }
+}
+
+// 서버에 토큰을 전달하여 'club_all' 토픽에 등록하게 하는 함수
+Future<void> registerTokenWithServer(String token) async {
+  try {
+    // constants.dart에 정의된 baseUrl을 사용하여 경로 설정
+    final url = Uri.parse(Config.registerToken); 
+    
+    final response = await http.post(
+      url,
+      headers: {"Content-Type": "application/json"},
+      body: jsonEncode({"token": token}),
+    );
+
+    if (response.statusCode == 200) {
+      print("🚀 서버에 토큰 등록 성공 (전체 공지 구독 완료)");
+    } else {
+      print("❌ 서버 토큰 등록 실패: ${response.statusCode} - ${response.body}");
+    }
+  } catch (e) {
+    print("❌ 서버 통신 에러: $e");
+  }
 }
 
 class MyApp extends StatelessWidget {
@@ -551,14 +604,23 @@ class MainDashboard extends StatelessWidget {
                                 builder: (context) => ClubCalendarScreen(userId: userId),
                               ),
                             );                             
-                          } else if (title == '회원 관리') {
+                          } 
+                          else if (title == '회원 관리') {
                             Navigator.push(
                               context,
                               MaterialPageRoute(
                                 builder: (context) => MngMemberScreen(userId: userId),
                               ),
                             );
-                          }else {
+                          } 
+                          else if (title == '공지사항') {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) => NoticeScreen(userRole: userRole, userName: userName),
+                              ),
+                            );  
+                          } else {
                             // 아직 구현 안 된 메뉴들은 그냥 출력만!
                             print("$title 클릭됨 - 아직 화면이 연결되지 않았습니다.");
                             

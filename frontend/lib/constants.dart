@@ -32,6 +32,13 @@ class Config {
   static const String getMembersInfo = "$baseUrl/api/get_members";
   static const String updateMember = "$baseUrl/api/update_member";
   static const String deleteMember = "$baseUrl/api/delete_member";
+  // 공지사항 관련
+  static const String getNotices = "$baseUrl/api/get_notices";
+  static const String addNotice = "$baseUrl/api/add_notice";
+  static const String updateNotice = "$baseUrl/api/update_notice";
+  static const String deleteNotice = "$baseUrl/api/delete_notice";
+  // 알림 관련
+  static const String registerToken = "$baseUrl/api/register_token";
 
   
 }

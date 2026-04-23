@@ -1,74 +1,81 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <!--
-    If you are serving your web app in a path other than the root, change the
-    href value below to reflect the base path you are serving from.
-
-    The path provided below has to start and end with a slash "/" in order for
-    it to work correctly.
-
-    For more details:
-    * https://developer.mozilla.org/en-US/docs/Web/HTML/Element/base
-
-    This is a placeholder for base href that will be replaced by the value of
-    the `--base-href` argument provided to `flutter build`.
-  -->
   <base href="$FLUTTER_BASE_HREF">
-
-  <base href="./">
 
   <meta charset="UTF-8">
   <meta content="IE=Edge" http-equiv="X-UA-Compatible">
-  <meta name="description" content="A new Flutter project.">
+  <meta name="description" content="제주양궁클럽">
 
-  <!-- iOS meta tags & icons -->
-  <meta name="mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-status-bar-style" content="black">
-  <meta name="apple-mobile-web-app-title" content="frontend">
-  <link rel="apple-touch-icon" href="icons/Icon-192.png">
-
-  <!-- Favicon -->
+  <link rel="apple-touch-icon" href="icons/bow-and-arrow.png">
   <link rel="icon" type="image/png" href="favicon.png"/>
 
-  <title>frontend</title>
+  <title>제주양궁클럽</title>
   <link rel="manifest" href="manifest.json">
-</head>
-<body>
-  <!--
-    You can customize the "flutter_bootstrap.js" script.
-    This is useful to provide a custom configuration to the Flutter loader
-    or to give the user feedback during the initialization process.
-
-    For more details:
-    * https://docs.flutter.dev/platform-integration/web/initialization
-  -->
-  <script src="flutter_bootstrap.js" async></script>
 
   <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-messaging-compat.js"></script>
+</head>
+<body>
 
-  <!-- <script>
+  <script>
     if ('serviceWorker' in navigator) {
-      window.addEventListener('load', function() {
-        // 플러터 패키지가 자꾸 생성하는 그 경로를 우리가 먼저 등록해버립니다.
-        navigator.serviceWorker.register('/firebase-messaging-sw.js', {
-          scope: '/firebase-cloud-messaging-push-scope' 
-        }).then(function(reg) {
-          console.log('FCM 전용 스코프 선점 성공:', reg.scope);
-        });
-
-        // 기본 루트 스코프도 하나로 통일 (기존 코드 유지 또는 수정)
-        navigator.serviceWorker.register('/firebase-messaging-sw.js', {
-          scope: '/'
-        }).then(function(reg) {
-          console.log('루트 스코프 등록 성공:', reg.scope);
-        });
+      window.addEventListener('load', function () {
+        navigator.serviceWorker.register('/firebase-messaging-sw.js');
       });
-    } else {
-      console.log('이 브라우저는 서비스 워커를 지원하지 않거나, 보안 환경(HTTPS)이 아닙니다.');
     }
-  </script> -->
+  </script>
+  
+  <script src="flutter_bootstrap.js" async></script>
+
+  <script>
+    // 2. 플러터 엔진이 로드되었을 때 서비스 워커를 우리 파일로 바꿔치기합니다.
+    window.addEventListener("flutter-first-frame", function() {
+      console.log("✅ 플러터 첫 프레임 로드 완료");
+    });
+
+    // 플러터 부트스트랩 과정에서 커스텀 설정을 주입하는 최신 표준 방식
+    if (typeof _flutter === 'undefined') {
+      window.addEventListener('flutter-initialized', function (event) {
+        // 이미 초기화된 경우 처리
+      });
+    }
+  </script>
 
 </body>
 </html>
+
+
+<!-- <!DOCTYPE html>
+<html>
+<head>
+  <base href="$FLUTTER_BASE_HREF"> 
+  <meta charset="UTF-8">
+  <meta content="IE=Edge" http-equiv="X-UA-Compatible">
+  <meta name="description" content="제주양궁클럽">
+
+  <link rel="apple-touch-icon" href="icons/bow-and-arrow.png">
+  <link rel="icon" type="image/png" href="favicon.png"/>
+
+  <title>제주양궁클럽</title>
+  <link rel="manifest" href="manifest.json">
+
+  <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-messaging-compat.js"></script>
+</head>
+<body>
+  
+  <script>
+    // 2. 플러터의 기본 로직을 커스텀하여 'firebase-messaging-sw.js'만 사용하도록 강제합니다.
+    window.flutterConfiguration = {
+      serviceWorker: {
+        serviceWorkerUrl: './firebase-messaging-sw.js', // 👈 플러터 워커 대신 우리 파일을 쓰게 합니다.
+        timeoutMillis: 4000,
+      }
+    };
+  </script>
+
+  <script src="flutter_bootstrap.js" async></script>
+
+</body>
+</html> -->

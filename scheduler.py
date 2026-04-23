@@ -2,33 +2,34 @@ import sqlite3
 import time
 import firebase_admin
 import os
-from dotenv import load_dotenv
 from datetime import datetime, timedelta
 from apscheduler.schedulers.background import BackgroundScheduler
 from firebase_admin import credentials, messaging
+from config import DB_PATH, initialize_firebase, FCM_TOPIC_NAME, DATABASE_NAME
 
-load_dotenv() #.env 파일 읽어오기
+
 # 1. 파이어베이스 초기화
-cred = credentials.Certificate(os.getenv("FIREBASE_JSON")) # 파일명 확인!
-firebase_admin.initialize_app(cred)
+initialize_firebase()
 
 # 2. 공통 알람 발송 함수
 def send_fcm_notification(title, body):
-    token = os.getenv("FIREBASE_TOKEN")
-
     try:        
         message = messaging.Message(
-            # notification=messaging.Notification(title=title, body=body),
-            # #topic="club_all", # 모든 가입자가 구독할 토픽 이름
-            # token=token, 
-            data={'title': title, 'body': body,},
-            token=token,
+            data={'title': title, 'body': body},
+            webpush=messaging.WebpushConfig(
+                notification=messaging.WebpushNotification(
+                    title=title,
+                    body=body,
+                    icon="/icons/bow-and-arrow.png",
+                    tag="jejuac-event-alarm" # 공지 알림과 구분되는 태그
+                ),
+            ),
+            topic=FCM_TOPIC_NAME
         )
         response = messaging.send(message)
         print(f"Successfully sent message: {response}")
     except Exception as e:
         print(f"Error sending message: {e}")
-        
 
 # 3. DB 조회 및 알람 로직 (SQLite 사용)
 def check_and_send_alarms(target_date, alarm_type):
@@ -36,14 +37,12 @@ def check_and_send_alarms(target_date, alarm_type):
     target_date: 'YYYY-MM-DD' 형식의 날짜
     alarm_type: '오늘' 또는 '내일' (메시지 문구용)
     """
-    conn = sqlite3.connect("database.db") # 영님의 DB 파일명으로 수정
-    cursor = conn.cursor()
-    
-    # 쿼리: 해당 날짜에 알람 설정(use_alarm=1)이 된 일정 조회
-    query = "SELECT title FROM schedules WHERE start_date = ? AND use_alarm = 1"
-    cursor.execute(query, (target_date,))
-    schedules = cursor.fetchall()
-    conn.close()
+    with sqlite3.connect(DATABASE_NAME) as conn:    
+        cursor = conn.cursor()        
+        # 쿼리: 해당 날짜에 알람 설정(use_alarm=1)이 된 일정 조회
+        query = "SELECT title FROM schedules WHERE start_date = ? AND use_alarm = 1"
+        cursor.execute(query, (target_date,))
+        schedules = cursor.fetchall()        
 
     if schedules:
         # 일정이 여러 개일 경우 하나로 묶어서 발송

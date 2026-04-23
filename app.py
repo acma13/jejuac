@@ -10,6 +10,9 @@ import database as db
 import auth
 import re
 import os
+import firebase_admin
+from firebase_admin import credentials, messaging
+from config import initialize_firebase, FCM_TOPIC_NAME, FRONTEND_PATH
 
 # 4. 초기화: DB 연결
 # 1. 서버가 켜질 때와 꺼질 때 할 일을 정의하는 'Lifespan' 함수
@@ -28,17 +31,14 @@ async def lifespan(app: FastAPI):
 app = FastAPI(title="제주양궁클럽 API", lifespan=lifespan, redirect_slashes=False)
 
 # ---- 플러터 빌드
-# 1. 빌드된 파일들이 있는 실제 '절대 경로'를 계산합니다.
-# 현재 app.py가 있는 위치에서 frontend/build/web 폴더를 가리킵니다.
-frontend_path = os.path.join(os.path.dirname(__file__), "frontend", "build", "web")
 
 # app = FastAPI() 바로 아래에 추가
-app.mount("/web", StaticFiles(directory=frontend_path), name="web")
+app.mount("/web", StaticFiles(directory=FRONTEND_PATH), name="web")
 
 # 3. 메인 접속 시 index.html 반환
 @app.get("/")
 async def read_index():
-    index_path = os.path.join(frontend_path, "index.html")
+    index_path = os.path.join(FRONTEND_PATH, "index.html")
     return FileResponse(index_path)
 
 # 2. CORS 설정 (플러터 웹에서 접속 허용)
@@ -51,7 +51,82 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# 5. [API 엔드포인트 1] 로그인 처리
+# -------------- 공지사항 알림 관련 start ---------------
+# 1. Firebase 초기화 (파일명 확인!)
+
+# base_dir = os.path.dirname(os.path.abspath(__file__))
+# sdk_path = os.path.join(base_dir, "firebase_admin_sdk.json")
+
+# if not firebase_admin._apps:
+#     try:
+#         if not os.path.exists(sdk_path):
+#             print(f"❌ 파일을 찾을 수 없습니다: {sdk_path}")
+#         else:
+#             cred = credentials.Certificate(sdk_path) 
+#             firebase_admin.initialize_app(cred)
+#             print("✅ Firebase Admin SDK 초기화 성공")
+#     except Exception as e:
+#         print(f"❌ Firebase 초기화 실패: {e}")
+
+# 위 내용은 config.py 로 이관
+
+initialize_firebase()
+
+# 2. 웹 푸시 발송 함수
+async def send_notice_push(title, content, is_important):
+    try:
+        prefix = "📢 [중요] " if is_important else "🔔 [공지] "
+        
+        message = messaging.Message(
+            # 1. notification 객체는 반드시 있어야 브라우저가 인식합니다.
+            notification=messaging.Notification(
+                title=f"{prefix}{title}",
+                body="새로운 공지사항이 등록되었습니다.",
+            ),
+            # 2. 'data' 필드도 함께 보내야 Flutter의 onMessage가 더 잘 낚아챕니다.
+            data={
+                "title": f"{prefix}{title}",
+                "body": "새로운 공지사항이 등록되었습니다.",
+            },
+            # 3. ⭐ 웹 전용 설정 (WebpushConfig) - 이게 없으면 웹에서 누락되는 경우가 많습니다.
+            webpush=messaging.WebpushConfig(
+                # fcm_options=messaging.WebpushFCMOptions(
+                #     link="/" # 알림 클릭 시 이동할 경로
+                # ),
+                notification=messaging.WebpushNotification(
+                    body="새로운 공지사항이 등록되었습니다.",
+                    icon="/icons/bow-and-arrow.png",
+                    tag="jejuac-notification"
+                ),
+            ),
+            topic=FCM_TOPIC_NAME, # 서버 변수 FCM_TOPIC_NAME이 "club_all"인지 꼭 확인!
+        )
+        response = messaging.send(message)
+        print(f"🚀 푸시 발송 완료: {response}")
+    except Exception as e:
+        print(f"❌ 푸시 발송 실패: {e}")
+
+@app.post("/api/register_token")
+async def register_token(data: dict):
+    token = data.get("token")
+    if not token:
+        return {"status": "error", "message": "토큰이 없습니다."}
+    
+    try:
+        # 서버 SDK가 직접 이 토큰을 'club_all' 토픽에 가입시킵니다.
+        # 웹(PWA) 에러를 해결하는 핵심 코드입니다.
+        response = messaging.subscribe_to_topic([token], FCM_TOPIC_NAME)
+        
+        print(f"✅ 기기 구독 성공: {response.success_count}건")
+        return {"status": "success"}
+    except Exception as e:
+        print(f"❌ 구독 처리 에러: {e}")
+        return {"status": "error", "message": str(e)}
+
+    
+# -------------- 공지사항 알림 관련 end ---------------
+
+# 로그인 처리
 
 class LoginRequest(BaseModel):
     userid: str
@@ -205,6 +280,9 @@ class scheduleRequest(BaseModel):
     color: int
     use_alarm: bool
 
+class deleteScheduleRequest(BaseModel):
+    id: str
+
 # 클럽 일정 등록
 @app.post("/api/insert_club_schedule")
 async def insert_club_schedule(req: scheduleRequest):
@@ -241,9 +319,6 @@ async def api_update_schedule(req: scheduleRequest):
 
 # 클럽 일정 삭제
 
-class deleteScheduleRequest(BaseModel):
-    id: str
-
 @app.post("/api/delete_schedule")
 async def api_delete_schedule(req: deleteScheduleRequest):
     try:
@@ -277,6 +352,17 @@ class addMember(BaseModel):
     is_active: bool
     created_by : str
 
+class modifyMember(BaseModel):
+    id: int
+    name: str
+    phone: str
+    birth: str
+    member_class: str
+    is_active: bool
+
+class deleteMember(BaseModel):
+    id: int
+
 @app.post("/api/insert_member")
 async def insert_member(req: addMember):
     success, message = db.insert_member(req.model_dump())
@@ -292,14 +378,6 @@ async def insert_member(req: addMember):
 async def get_members():
     memberlist = db.get_all_members()
     return memberlist
-
-class modifyMember(BaseModel):
-    id: int
-    name: str
-    phone: str
-    birth: str
-    member_class: str
-    is_active: bool    
 
 # 클럽 일정 수정
 @app.post("/api/update_member")
@@ -321,10 +399,7 @@ async def update_member(req: modifyMember):
     except Exception as e:
         print(f"❌ 수정 API 에러: {e}")
         return {"success": False, "message": str(e)}
-    
-class deleteMember(BaseModel):
-    id: int
-    
+ 
 @app.post("/api/delete_member")
 async def delete_member(req: deleteMember):
     try:
@@ -346,3 +421,63 @@ async def delete_member(req: deleteMember):
     except Exception as e:
         print(f"❌ 삭제 API 에러: {e}")
         return {"success": False, "message": str(e)}
+    
+# 공지사항 관련 API
+
+class NoticeRequest(BaseModel):
+    title: str
+    content: str
+    is_important: bool
+    author_name: str
+
+class UpdateNoticeRequest(BaseModel):
+    id: int
+    title: str
+    content: str
+    is_important: bool
+
+class DeleteNoticeRequest(BaseModel):
+    id: int
+
+@app.post("/api/add_notice")
+async def add_notice(req: NoticeRequest):
+    try:
+        db.add_notice(req.title, req.content, req.is_important, req.author_name)
+        print("[Add_notice] 1. DB 저장 성공 (세션 생존 확인)")
+        # 저장 성공 후 푸시 알림 발송
+        try:
+            print("[Add_notice] 2. 푸시 발송 시도...")
+            await send_notice_push(req.title, req.content, req.is_important)
+            print("[Add_notice] 3. 푸시 발송 로직 통과")
+        except Exception as push_e:
+            print(f"[Add_notice] 4. 푸시만 실패(DB는 성공): {push_e}")
+
+        return {"status": "success", "message": "공지가 등록되었습니다."}
+    except Exception as e:
+        print(f"[Add_notice] 에러: {e}")
+        return {"status": "error", "message": str(e)}
+
+@app.post("/api/update_notice")
+async def update_notice(req: UpdateNoticeRequest):
+    try:
+        db.update_notice(req.id, req.title, req.content, req.is_important)
+        return {"status": "success", "message": "공지가 수정되었습니다."}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
+@app.post("/api/delete_notice")
+async def delete_notice(req: DeleteNoticeRequest):
+    try:
+        db.delete_notice(req.id)
+        return {"status": "success", "message": "공지가 삭제되었습니다."}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
+@app.get("/api/get_notices")
+async def get_notices():
+    try:
+        # database.py에서 딕셔너리 리스트로 가져온 데이터를 바로 반환
+        notices = db.get_all_notices()        
+        return {"status": "success", "data": notices}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}

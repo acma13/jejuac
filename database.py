@@ -2,11 +2,22 @@ import sqlite3
 import auth  # 패스워드 암호화 및 검증용
 import pandas as pd
 import os
-from dotenv import load_dotenv
+from config import DB_PATH #
+# from dotenv import load_dotenv
 
-load_dotenv()
+# load_dotenv()
 
-DB_PATH = os.getenv("DATABASE_PATH")
+# # 1. 환경 변수 읽기
+# env_db_path = os.getenv("DATABASE_PATH", "archery_club.db")
+
+# # 2. 만약 경로가 파일명만 있다면(절대 경로가 아니라면)
+# if not os.path.isabs(env_db_path):
+#     # database.py가 있는 폴더 기준으로 절대 경로를 생성합니다.
+#     base_dir = os.path.dirname(os.path.abspath(__file__))
+#     DB_PATH = os.path.join(base_dir, env_db_path)
+# else:
+#     DB_PATH = env_db_path
+# --> 위 코드들 config.py 로 이관
 
 def get_connection():
     """DB 커넥션을 생성하고 기본 설정을 적용합니다."""
@@ -14,6 +25,8 @@ def get_connection():
     conn.execute("PRAGMA foreign_keys = ON")  # 외래 키 활성화
     conn.row_factory = sqlite3.Row            # dict처럼 사용 가능하게 설정
     return conn
+
+print(f"🚩 확정된 DB 경로: {DB_PATH}")
 
 def init_db():
     """데이터베이스 테이블 초기화 및 관리자 계정 생성"""
@@ -86,6 +99,15 @@ def init_db():
                         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                     )""")
         
+        # 6. 공지사항 테이블 생성
+        c.execute("""CREATE TABLE IF NOT EXISTS notices (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        title TEXT NOT NULL,
+                        content TEXT NOT NULL,
+                        author_name TEXT, 
+                        is_important INTEGER DEFAULT 0,
+                        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+                    )""")
 
         # [Admin] 최초 관리자 계정 생성 (없을 때만)
         c.execute("SELECT * FROM users WHERE role = 'Admin'")
@@ -455,3 +477,62 @@ def delete_member(memberId):
             conn.rollback()
             print(f"❌ 회원 삭제 실패: {e}")
             return False
+        
+# ---------------- 공지사항 관련 DB CRUD ---------------
+
+# 1. 공지사항 조회
+def get_all_notices():
+    with get_connection() as conn:
+        try:
+            conn.row_factory = sqlite3.Row            
+            # 1. 중요 공지(is_important=1)를 가장 위로
+            # 2. 그 다음 최신 등록순(id DESC 또는 created_at DESC)으로 정렬
+            query = "SELECT * FROM notices ORDER BY is_important DESC, id DESC"
+            cursor = conn.execute(query)
+            notices = cursor.fetchall()
+            
+            # Row 객체들을 딕셔너리 리스트로 변환하여 반환
+            return [dict(row) for row in notices]
+        except Exception as e:
+            print(f"❌ 공지사항 조회 실패: {e}")
+            return []
+
+# 2. 공지사항 추가
+def add_notice(title, content, is_important, author_name):
+    with get_connection() as conn:
+        try:
+            conn.execute('INSERT INTO notices (title, content, is_important, author_name) VALUES (?, ?, ?, ?)',
+                        (title, content, 1 if is_important else 0, author_name))
+            conn.commit()
+            # conn.close()  # with 문은 블록이 끝나는 순간 알아서 정리하고 닫아줌. 하지마삼.
+        except Exception as e:
+            conn.rollback()
+            print(f"❌ 공지사항 등록 실패: {e}")
+            return False
+
+
+# 3. 공지사항 수정
+def update_notice(notice_id, title, content, is_important):
+    with get_connection() as conn:
+        try:
+            conn.execute('UPDATE notices SET title = ?, content = ?, is_important = ? WHERE id = ?',
+                        (title, content, 1 if is_important else 0, notice_id))
+            conn.commit()
+            
+        except Exception as e:
+            conn.rollback()
+            print(f"❌ 공지사항 수정 실패: {e}")
+            return False
+
+# 4. 공지사항 삭제
+def delete_notice(notice_id):
+    with get_connection() as conn:
+        try:
+            conn.execute('DELETE FROM notices WHERE id = ?', (notice_id,))
+            conn.commit()
+            
+        except Exception as e:
+            conn.rollback()
+            print(f"❌ 공지사항 등록 실패: {e}")
+            return False
+
