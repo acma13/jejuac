@@ -389,6 +389,44 @@ class _LoginFormWidgetState extends State<LoginFormWidget> {
               ),
               child: const Text('로그인'),
             ),
+            // 아이폰 전용 알림 허용 버튼 추가
+            const SizedBox(height: 15),
+            TextButton.icon(
+              onPressed: () async {
+                // [핵심] 사용자의 직접 터치로 권한 팝업 강제 소환
+                NotificationSettings settings = await FirebaseMessaging.instance.requestPermission(
+                  alert: true,
+                  badge: true,
+                  sound: true,
+                );                
+
+                if (settings.authorizationStatus == AuthorizationStatus.authorized) {
+                  // 권한 허용 시 토큰을 다시 한번 확인하고 로그로 찍어줍니다.
+                  String? token = await FirebaseMessaging.instance.getToken(
+                    vapidKey: AppConfig.vapidKey // 여기에 VAPID Key 꼭 넣어주세요!
+                  );                  
+
+                  if (!context.mounted) return; // 화면이 이미 사라졌다면 여기서 중단해라!
+
+                  print("아이폰 권한 승인 완료! FCM 토큰: $token");
+                  
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text("알림 수신이 활성화되었습니다! 🎯")),
+                  );
+                } else {
+                  if (!context.mounted) return; // 화면이 이미 사라졌다면 여기서 중단해라!
+                  
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text("알림 권한이 거부되었습니다. 설정에서 확인해주세요.")),
+                  );
+                }
+              },
+              icon: const Icon(Icons.notification_add, size: 18, color: Colors.grey),
+              label: const Text(
+                "아이폰 사용자는 여기를 눌러 알림을 활성화해주세요",
+                style: TextStyle(color: Colors.grey, fontSize: 12, decoration: TextDecoration.underline),
+              ),
+            ),
           ],
         ),
       ),

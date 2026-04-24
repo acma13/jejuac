@@ -1,6 +1,6 @@
 {
-    "name": "frontend",
-    "short_name": "frontend",
+    "name": "제주양궁클럽 관리앱",
+    "short_name": "제주양궁클럽",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#0175C2",
