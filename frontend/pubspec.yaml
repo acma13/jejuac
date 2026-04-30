@@ -21,7 +21,7 @@ dependencies:
   syncfusion_localizations: ^28.1.38
 
   # 엔진이 요구하는 0.20.2 유지
-  intl: 0.20.2 
+  intl: ^0.20.2 
          
   flutter_local_notifications: ^20.1.0
   timezone: ^0.10.0

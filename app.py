@@ -11,6 +11,8 @@ import auth
 import re
 import os
 import firebase_admin
+import io
+import pandas as pd
 from firebase_admin import credentials, messaging
 from config import initialize_firebase, FCM_TOPIC_NAME, FRONTEND_PATH
 
@@ -422,7 +424,7 @@ async def delete_member(req: deleteMember):
         print(f"❌ 삭제 API 에러: {e}")
         return {"success": False, "message": str(e)}
     
-# 공지사항 관련 API
+# ------ 공지사항 관련 API ----------
 
 class NoticeRequest(BaseModel):
     title: str
@@ -481,3 +483,298 @@ async def get_notices():
         return {"status": "success", "data": notices}
     except Exception as e:
         return {"status": "error", "message": str(e)}
+    
+# ----------- TO_DO 관련 API ---------------
+
+# 할 일 데이터 모델
+class TodoAddRequest(BaseModel):
+    title: str
+    due_date: str
+    assignee: str
+    content: str
+    attachment_url: Optional[str] = None
+    created_by: Optional[str] = None
+
+class TodoContentUpdateRequest(BaseModel):
+    id: int  # Optional이 아니므로 없으면 에러 발생
+    title: str
+    due_date: str
+    assignee: str
+    content: str
+    attachment_url: Optional[str] = None
+    created_by: Optional[str] = None    
+
+class TodoStatusUpdateRequest(BaseModel):
+    id: int  # Optional이 아니므로 없으면 에러 발생
+    is_completed: bool
+
+class TodoDeleteRequest(BaseModel):
+    id: int
+
+# 할 일 목록 가져오기
+@app.get("/api/get_todos")
+async def get_todos():
+    try:
+        data = db.get_all_todos()
+        return {"success": True, "data": data}
+    except Exception as e:
+        print(f"Get Content Error: {e}")
+        return {"success": False, "data": [], "message": str(e)}
+
+# 할 일 추가
+@app.post("/api/add_todo")
+async def add_todo(req: TodoAddRequest):
+    try:
+        result = db.add_todo(
+            req.title, req.due_date, req.assignee, 
+            req.content, req.attachment_url, req.created_by
+        )
+
+        # TODO: 등록 시 알람 쏘는거 만들어야 함.
+        #       공지 쏘던거랑 같이 쓰면 될 것 같은데 이 부분은 수정이 필요해보임.
+        if result:
+            return {"status": "success"}
+        else:
+            return {"status": "error", "message": "DB 저장 실패"}
+    except Exception as e:
+        print(f"Add Content Error: {e}")
+        return {"success": False, "message": str(e)}
+
+# [1] 내용 수정 API
+@app.post("/api/update_todo_content")
+async def update_content(req: TodoContentUpdateRequest): 
+    try:
+        result = db.update_todo_content(
+            req.id, req.title, req.due_date, req.assignee, req.content, req.attachment_url
+        )
+        return {"success": result}
+    except Exception as e:
+        print(f"Update Content Error: {e}")
+        return {"success": False, "message": str(e)}
+
+# [2] 상태 변경 API (스와이프 전용)
+@app.post("/api/update_todo_status")
+async def update_status(req: TodoStatusUpdateRequest): 
+    try:
+        result = db.update_todo_status(req.id, req.is_completed)
+        return {"success": result}
+    except Exception as e:
+        print(f"Update Status Error: {e}")
+        return {"success": False, "message": str(e)}
+
+# 할 일 삭제
+@app.post("/api/delete_todo")
+async def delete_todo_api(req: TodoDeleteRequest):
+    try: 
+        # print(f"API 의 할 일 삭제 ID: {req.id}")
+
+        result = db.delete_todo(req.id)
+
+        return {"success": "success", "message": "할 일이 삭제되었습니다."}
+    except Exception as e:
+        print(f"Delete Content Error: {e}")
+        return {"success": False, "message": str(e)}
+    
+
+# ----------- 장비 관련 API ---------------
+# 할 일 데이터 모델
+class EquipmentAddRequest(BaseModel):
+    name: str
+    spec: Optional[str] = ""
+    location: Optional[str] = ""
+    note: Optional[str] = ""
+    stock: int = 0
+    
+
+class EquipmentUpdateRequest(BaseModel):
+    id: int  # Optional이 아니므로 없으면 에러 발생
+    name: str
+    spec: Optional[str] = ""
+    location: Optional[str] = ""
+    note: Optional[str] = ""
+
+class AddTradeInfoRequest(BaseModel):
+    equipment_id : int
+    member_id: Optional[int] = "",
+    trade_type: str
+    quantity: int
+    unit_price: int
+    total_price: int
+    note: Optional[str] = ""
+    processed_by: str
+
+
+# 1. 활성 회원 목록 조회 (드롭박스용)
+@app.get("/api/get_active_members")
+async def api_get_active_members():    
+    try:
+        data = db.get_active_members_db()
+        return {"success": True, "data": data}  
+    except Exception as e:
+        print(f"Get Content Error: {e}")
+        return {"success": False, "data": [], "message": str(e)}
+    
+# 1.1. 현재재고 조회
+@app.get("/api/get_present_stock/{equipmentid}")
+async def api_get_present_stock(equipmentid: int):
+    try:
+        stock_count = db.get_equipment_stock(equipmentid)
+        return {"success": True, "stock": stock_count}
+    except Exception as e:
+        print(f"Stock Fetch Error: {e}")
+        return {"success": False, "stock": 0, "message": str(e)} 
+    
+# 1.2. 현 회원의 출고 수량 조회
+@app.get("/api/get_out_member_stock/{equipmentId}/{memberId}")
+async def api_get_member_stock(equipmentId: int, memberId: int):
+    try:
+        stock = db.get_member_out_stock(equipmentId, memberId)
+        return {"success": True, "out_stock": stock}
+    except Exception as e:
+        return {"success": False, "message": str(e)}
+
+# 1.3. 현 장비의 입출고 내역 존재 여부 확인
+@app.get("/api/check_equipment_history_exists/{equipmentId}")
+def check_history(equipmentId: int):
+    try:
+        has_history = db.check_equipment_history_exists(equipmentId)
+        return {"success": True, "has_history": has_history}
+    except Exception as e:
+        return {"success": False, "message": str(e)}
+    
+# 2. 장비 목록 조회
+@app.get("/api/get_equipments")
+async def api_get_equipments():
+    try:
+        data = db.get_all_equipments()
+        return {"success": True, "data": data}    
+    except Exception as e:
+        print(f"Get Content Error: {e}")
+        return {"success": False, "data": [], "message": str(e)}
+    
+
+# 3. 장비 등록
+@app.post("/api/add_equipment")
+async def api_add_equipment(req: EquipmentAddRequest):    
+    try:
+        result = db.add_equipment_db(req.name, req.spec, req.location, req.note, req.stock)
+        
+        if result:
+            return {"status": "success"}
+        else:
+            return {"status": "error", "message": "DB 저장 실패"}
+    except Exception as e:
+        print(f"Add Content Error: {e}")
+        return {"success": False, "message": str(e)}
+
+# 4. 장비 수정
+@app.post("/api/update_equipment/equipmentId}")
+async def api_update_equipment(req: EquipmentUpdateRequest):
+    # update_equipment_db(data['id'], data)    
+    try:
+        result = db.update_equipment_db(req.id, req.name, req.spec, req.location, req.note)
+        return {"success": result}
+    except Exception as e:
+        print(f"Update Content Error: {e}")
+        return {"success": False, "message": str(e)}
+
+# 5. 장비 삭제
+@app.post("/api/delete_equipment/{equipmentId}")
+async def api_delete_equipment(equipmentId: int):
+    try:
+        result = db.delete_equipment_db(equipmentId)
+
+        return {"success": "success", "message": "장비 내역이 삭제되었습니다."}
+    except Exception as e:
+        print(f"Delete Content Error: {e}")
+        return {"success": False, "message": str(e)}
+
+# 6. 입출고 내역 조회
+@app.get("/api/get_trade_list/{equipmentId}")
+async def api_get_trade_list(equipmentId: int):    
+    try:
+        data = db.get_trade_history(equipmentId)
+        return {"success": True, "data": data}    
+    except Exception as e:
+        print(f"Get Content Error: {e}")
+        return {"success": False, "data": [], "message": str(e)}
+
+# 7. 입출고 내역 등록
+@app.post("/api/add_trade_list")
+async def api_add_trade(req: AddTradeInfoRequest):    
+    # database.py에 만든 함수 호출
+    success, msg = db.add_trade_record(req.equipment_id, req.member_id, req.trade_type, req.quantity, req.unit_price, req.total_price, req.note, req.processed_by)
+    
+    if success:
+        return {"success": True, "message": msg}
+    else:
+        # 실패 시 400 에러나 500 에러를 줄 수도 있지만, 
+        # 우선 success: False로 처리해서 플러터에서 메시지를 띄우게 합니다.
+        return {"success": False, "message": msg}
+
+
+# ---------------- 데이터 마이그레이션 관련 API ----------------
+
+class MigrationRequest(BaseModel):
+    url: str
+    admin_id: str
+    data_type: str
+
+@app.post("/api/upload_members_list")
+async def upload_members_list(req: MigrationRequest):
+    sheet_url = req.url
+    admin_id = req.admin_id
+
+    if not sheet_url:
+        raise HTTPException(status_code=400, detail="URL이 없습니다.")
+
+    try:
+        # 1. 구글 시트 URL을 CSV 다운로드 링크로 변환
+        csv_url = sheet_url.replace('/edit?usp=sharing', '/export?format=csv')
+        if '/edit#gid=' in csv_url:
+            csv_url = csv_url.replace('/edit#gid=', '/export?format=csv&gid=')
+        elif '/edit' in csv_url and '/export' not in csv_url:
+             csv_url = csv_url.replace('/edit', '/export?format=csv')
+
+        # 2. Pandas로 데이터 읽기
+        # 주의: FastAPI 환경이므로 별도의 requests 없이 pandas가 직접 URL을 읽을 수 있습니다.
+        df = pd.read_csv(csv_url)
+
+        required_columns = {
+            '회원': ['name', 'phone', 'class', 'birth', 'is_active'],
+            '결제': ['member_id', 'amount', 'payment_date'], # TODO: 추후에 변경 할 것
+            '장비': ['equipment_name', 'serial_number']     # TODO: 추후에 변경 할 것
+        }
+        current_cols = df.columns.tolist()
+        missing_cols = [col for col in required_columns[req.data_type] if col not in current_cols]
+
+        if missing_cols:
+            raise HTTPException(
+                status_code=400, 
+                detail=f"잘못된 시트 양식입니다. 빠진 항목: {', '.join(missing_cols)}"
+            )
+        
+        # 3. 데이터 가공 (선배님의 1900-01-01 전략 적용)
+        # 시트 컬럼명: name, phone, class, birth, is_active
+        df['birth'] = df['birth'].fillna('1900-01-01').astype(str)
+        df['is_active'] = df['is_active'].fillna(1).astype(int)
+        
+        # 'member_class'로 DB 컬럼명이 되어있다면 시트의 'class'를 매칭해줍니다.
+        # 시트 열 이름이 'class'라면 아래처럼 처리
+        df['class'] = df['class'].fillna('일반')
+        
+        # NaN 값들을 dict 리스트로 변환
+        member_list = df.to_dict('records')
+
+        # 4. database.py의 함수 호출 (db 객체 사용)
+        # database.py에 작성하신 함수명이 upload_members_from_list 인지 확인하세요!
+        success, count = db.upload_members_from_list(member_list, admin_id)
+
+        if success:
+            return {"status": "success", "message": f"{count}명의 회원이 성공적으로 등록되었습니다."}
+        else:
+            raise HTTPException(status_code=500, detail="DB 등록 중 오류가 발생했습니다.")
+
+    except Exception as e:
+        print(f"❌ 마이그레이션 에러: {e}")
+        raise HTTPException(status_code=500, detail=f"시트 읽기 실패: {str(e)}")

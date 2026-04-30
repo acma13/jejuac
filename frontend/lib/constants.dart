@@ -13,7 +13,7 @@ class Config {
   // static const String baseUrl = "http://158.180.89.23:5000";
 
   // 실제 서버는 이것으로 사용 할 것!!!
-  //static const String baseUrl = "https://jejuac.duckdns.org/api";
+  // static const String baseUrl = "https://jejuac.duckdns.org/api";
 
   // 사용자 등록 및 로그인 관련
   static const String invitedEmails = "$baseUrl/api/invited-emails";
@@ -39,6 +39,25 @@ class Config {
   static const String deleteNotice = "$baseUrl/api/delete_notice";
   // 알림 관련
   static const String registerToken = "$baseUrl/api/register_token";
-
+  // TO-DO List 관련
+  static const String getTodos = "$baseUrl/api/get_todos";
+  static const String addTodo = "$baseUrl/api/add_todo";
+  static const String updateTodoContent = "$baseUrl/api/update_todo_content";
+  static const String updateTodoStatus = "$baseUrl/api/update_todo_status";
+  static const String deleteTodo = "$baseUrl/api/delete_todo";
+  // 장비 관련 
+  static const String getActiveMembers = "$baseUrl/api/get_active_members"; // 활동중인 회원 목록
+  static const String getPresentStock = "$baseUrl/api/get_present_stock"; // 현재재고 가져오기
+  static const String getOutMemberStock = "$baseUrl/api/get_out_member_stock"; // 해당 회원에 출고된 재고 가져오기
+  static const String getEquipmentHistoryExists = "$baseUrl/api/check_equipment_history_exists";  // 입출고내역 있는지 확인
+  static const String getEquipments = "$baseUrl/api/get_equipments"; // 장비 목록
+  static const String getTradeList = "$baseUrl/api/get_trade_list"; // 장비 입출고 내역
+  static const String addEquipment = "$baseUrl/api/add_equipment"; // 장비 등록
+  static const String updateEquipment = "$baseUrl/api/update_equipment"; // 장비 수정
+  static const String deleteEquipment = "$baseUrl/api/delete_equipment"; // 장비 삭제 (장비 입출고 내역이 있으면 삭제 불가)
+  static const String addTradeList = "$baseUrl/api/add_trade_list"; // 장비 입출고 내역 등록
+  
+  // 데이터 마이그레이션 관련
+  static const String uploadMembersList = "$baseUrl/api/upload_members_list";
   
 }

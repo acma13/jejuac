@@ -91,21 +91,21 @@ class _NoticeScreenState extends State<NoticeScreen> {
 
   // 삭제 확인 다이얼로그
   Future<bool> _showDeleteConfirmDialog() async {
-  return await showDialog(
-    context: context,
-    builder: (context) => AlertDialog(
-      title: const Text('공지 삭제'),
-      content: const Text('이 공지사항을 정말 삭제하시겠습니까?'),
-      actions: [
-        TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('취소')),
-        TextButton(
-          onPressed: () => Navigator.pop(context, true), 
-          child: const Text('삭제', style: TextStyle(color: Colors.red)),
-        ),
-      ],
-    ),
-  ) ?? false;
-}
+    return await showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('공지 삭제'),
+        content: const Text('이 공지사항을 정말 삭제하시겠습니까?'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('취소')),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true), 
+            child: const Text('삭제', style: TextStyle(color: Colors.red)),
+          ),
+        ],
+      ),
+    ) ?? false;
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -315,7 +315,18 @@ class _NoticeScreenState extends State<NoticeScreen> {
                           fillColor: Colors.white,
                         ),
                       )
-                    : Text(notice['title'], style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
+                    : Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+                        decoration: BoxDecoration(
+                          color: Colors.grey[50], // 아주 연한 회색 배경
+                          border: Border(left: BorderSide(color: const Color(0xFF166534), width: 4)), // 클럽 메인 컬러로 포인트
+                        ),
+                        child: Text(
+                          notice['title'],
+                          style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Colors.black87),
+                        ),
+                      ),
 
                 const SizedBox(height: 20),
 
@@ -332,7 +343,31 @@ class _NoticeScreenState extends State<NoticeScreen> {
                           fillColor: Colors.white,
                         ),
                       )
-                    : Text(notice['content'], style: const TextStyle(fontSize: 16, height: 1.6)),
+                    : Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.all(20),
+                        constraints: const BoxConstraints(minHeight: 200), // 최소 높이 지정
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: Colors.grey.shade300), // 입력창 테두리와 통일감
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withOpacity(0.05),
+                              blurRadius: 10,
+                              offset: const Offset(0, 4),
+                            ),
+                          ],
+                        ),
+                        child: Text(
+                          notice['content'],
+                          style: const TextStyle(
+                            fontSize: 16, 
+                            height: 1.8, // 줄간격을 조금 더 넓혀서 가독성 향상
+                            color: Colors.black87,
+                          ),
+                        ),
+                      ),
                 
                 const SizedBox(height: 24),
 

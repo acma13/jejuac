@@ -16,6 +16,9 @@ import 'screens/profile_update_screen.dart';
 import 'screens/club_calendar_screen.dart';
 import 'screens/mng_member_screen.dart';
 import 'screens/notice_screen.dart';
+import 'screens/todo_list_screen.dart';
+import 'screens/mng_equipment_screen.dart';
+import 'screens/data_migration_screen.dart';
 import 'constants.dart';
 import 'firebase_options.dart';
 import 'config/app_config.dart';
@@ -415,7 +418,7 @@ class _LoginFormWidgetState extends State<LoginFormWidget> {
                   );
                 } else {
                   if (!context.mounted) return; // 화면이 이미 사라졌다면 여기서 중단해라!
-                  
+
                   ScaffoldMessenger.of(context).showSnackBar(
                     const SnackBar(content: Text("알림 권한이 거부되었습니다. 설정에서 확인해주세요.")),
                   );
@@ -577,6 +580,7 @@ class MainDashboard extends StatelessWidget {
 
     if (userRole == 'Admin') {
       menus.add({'title': '사용자 초대', 'icon': Icons.forward_to_inbox, 'colors': [Colors.pink, Colors.redAccent]});
+      menus.add({'title': '데이터일괄처리', 'icon': Icons.upload_file, 'colors': [Colors.purple, Colors.deepPurpleAccent]});
     }
 
     return Scaffold(
@@ -658,6 +662,30 @@ class MainDashboard extends StatelessWidget {
                                 builder: (context) => NoticeScreen(userRole: userRole, userName: userName),
                               ),
                             );  
+                          } 
+                          else if (title == 'To-do List') {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) => TodoPage(userName: userName),
+                              ),
+                            ); 
+                          } 
+                          else if (title == '장비 관리') {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) => MngEquipmentScreen(userName: userName),
+                              ),
+                            ); 
+                          } 
+                          else if (title == '데이터일괄처리') {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) => DataMigrationScreen(userId: userId),
+                              ),
+                            ); 
                           } else {
                             // 아직 구현 안 된 메뉴들은 그냥 출력만!
                             print("$title 클릭됨 - 아직 화면이 연결되지 않았습니다.");
