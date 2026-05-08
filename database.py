@@ -50,9 +50,12 @@ def init_db():
                         email TEXT, 
                         role TEXT,
                         phone TEXT,
+                        fcm_token TEXT,
                         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                     )""")
         
+        #c.execute("ALTER TABLE users ADD COLUMN fcm_token TEXT")
+
         # 3. 클럽일정 테이블 생성
         c.execute("""
             CREATE TABLE IF NOT EXISTS schedules (
@@ -146,6 +149,42 @@ def init_db():
             )
         """)
 
+        # 9. 결제 내역 테이블 생성
+        c.execute("""
+            CREATE TABLE IF NOT EXISTS payments (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                member_id INTEGER NOT NULL,          -- members 테이블의 id 참조
+                name TEXT NOT NULL,                  -- 검색 편의를 위한 중복 저장 (선택 사항)
+                pay_item TEXT NOT NULL,              -- 결제 항목 (수강료, 장비대여 등)
+                target_month TEXT,                   -- 대상 연월 (예: '2026-04')
+                amount INTEGER NOT NULL DEFAULT 0,   -- 금액
+                is_paid INTEGER DEFAULT 0,           -- 납부 여부 (0: 미납, 1: 완납)
+                note TEXT,                           -- 비고 (화면엔 없지만 상세창엔 필요)
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                created_by TEXT,                     -- 등록한 관리자 ID
+                FOREIGN KEY (member_id) REFERENCES members (id) ON DELETE CASCADE
+            )
+        """)
+
+        # 특정 회원의 결제 내역을 빠르게 불러오기 위한 인덱스 설정
+        c.execute('CREATE INDEX IF NOT EXISTS idx_payments_member_id ON payments(member_id)')
+
+        # 10. Q&A 테이블 생성
+        c.execute("""
+            CREATE TABLE IF NOT EXISTS qna (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                title TEXT NOT NULL,
+                content TEXT NOT NULL,
+                author_id TEXT NOT NULL,    -- 작성자 ID
+                author_name TEXT NOT NULL,  -- 작성자 이름
+                answer TEXT,                -- 관리자 답변
+                is_answered INTEGER DEFAULT 0, -- 0: 대기, 1: 완료
+                fcm_token TEXT,             -- 답변 시 알림을 보내기 위한 질문자의 토큰 저장
+                created_at DATETIME DEFAULT (datetime('now', 'localtime')),
+                updated_at DATETIME DEFAULT (datetime('now', 'localtime'))
+            )
+        """)
+
         # [Admin] 최초 관리자 계정 생성 (없을 때만)
         c.execute("SELECT * FROM users WHERE role = 'Admin'")
         if not c.fetchone():
@@ -224,7 +263,8 @@ def update_user_profile(userid, name, phone, password=None):
                 c.execute(sql, (name, phone, userid))
             conn.commit()
             return True
-        except:
+        except Exception as e:
+            print(f"에러 발생 상세 내역: {e}")
             return False
         
 def register_user_with_invitation(userid, password, name, email, phone):
@@ -262,31 +302,55 @@ def register_user_with_invitation(userid, password, name, email, phone):
             return False, f"데이터베이스 오류: {str(e)}"        
         
 def add_invitation_email(email):
-    """ 초대할 신규 유저 이메일 등록 """
-    conn = get_connection()
-    try:
-        c = conn.cursor()
-        # invited_code 자리에 'NONE' 혹은 빈 값을 넣어서 기존 스키마 유지
-        sql = "INSERT INTO invited_users (email, is_used) VALUES (?, 0)"
-        c.execute(sql, (email.strip(),))
-        conn.commit()
-        return True
-    except Exception as e:
-        print(f"이메일 등록 오류: {e}")
-        return False
-    finally:
-        conn.close()
+    with get_connection() as conn: 
+        try:
+            c = conn.cursor()
+            sql = "INSERT INTO invited_users (email, is_used) VALUES (?, 0)"
+            c.execute(sql, (email.strip(),))
+            conn.commit()
+            return True
+        except Exception as e:
+            print(f"이메일 등록 오류: {e}")
+            return False
 
-def get_invited_emails():
-    """ 초대된 사용자 리스트 조회"""
-    conn = get_connection()
-    try:
+def get_invited_emails():    
+    with get_connection() as conn: # with 문으로 통일
         c = conn.cursor()
-        # 등록된 이메일과 사용 여부만 가져옴
         c.execute("SELECT email, is_used, created_at FROM invited_users ORDER BY id DESC")
         return c.fetchall()
-    finally:
-        conn.close()
+
+# 모든 가입 유저 리스트 조회 (ID, 이름, 역할, 전화번호)
+def get_all_users():
+    with get_connection() as conn:
+        c = conn.cursor()
+        # 필요한 정보만 선택하여 조회
+        c.execute("SELECT userid, name, role, phone, email FROM users")
+        rows = c.fetchall()
+        return [dict(row) for row in rows]
+
+# 유저 권한(role) 수정
+def update_user_role(p):
+    with get_connection() as conn:
+        try:
+            c = conn.cursor()
+            c.execute("UPDATE users SET role = ? WHERE userid = ?", (p.role, p.userid))
+            conn.commit()
+            return True
+        except Exception as e:
+            print(f"Role Update Error: {e}")
+            return False
+
+# 유저 삭제
+def delete_user(p):
+    with get_connection() as conn:
+        try:
+            c = conn.cursor()
+            c.execute("DELETE FROM users WHERE userid = ?", (p.userid,))
+            conn.commit()
+            return True
+        except Exception as e:
+            print(f"User Delete Error: {e}")
+            return False
 
 # --- [3. TO-DO LIST 관련 함수] ---
 
@@ -308,13 +372,13 @@ def get_all_todos():
             return []
     
 
-def add_todo(title, due_date, assignee, content, attachment_url, created_by):
+def add_todo(p):
     with get_connection() as conn:
         try:
             c = conn.cursor()
             c.execute("""INSERT INTO todos (title, due_date, assignee, content, attachment_url, created_by)
                         VALUES (?, ?, ?, ?, ?, ?)""", 
-                    (title, due_date, assignee, content, attachment_url, created_by))
+                    (p.title, p.due_date, p.assignee, p.content, p.attachment_url, p.created_by))
             conn.commit()
         except Exception as e:
             # 에러 발생 시 되돌리기
@@ -323,7 +387,7 @@ def add_todo(title, due_date, assignee, content, attachment_url, created_by):
             return False 
 
 # [1] 내용 전체 수정 (수정 폼용)
-def update_todo_content(todo_id, title, due_date, assignee, content, attachment_url):
+def update_todo_content(p):
     with get_connection() as conn:
         try:
             c = conn.cursor()
@@ -332,7 +396,7 @@ def update_todo_content(todo_id, title, due_date, assignee, content, attachment_
                 SET title=?, due_date=?, assignee=?, content=?, attachment_url=?
                 WHERE id=?
             """
-            c.execute(query, (title, due_date, assignee, content, attachment_url, todo_id))
+            c.execute(query, (p.title, p.due_date, p.assignee, p.content, p.attachment_url, p.todo_id))
             conn.commit()
             return True
         except Exception as e:
@@ -342,13 +406,13 @@ def update_todo_content(todo_id, title, due_date, assignee, content, attachment_
             return False 
 
 # [2] 상태만 변경 (스와이프용)
-def update_todo_status(todo_id, is_completed):
+def update_todo_status(p):
     with get_connection() as conn:
         try:
             c = conn.cursor()
             # is_completed는 bool로 받아서 1 또는 0으로 저장
             query = "UPDATE todos SET is_completed=? WHERE id=?"
-            c.execute(query, (1 if is_completed else 0, todo_id))
+            c.execute(query, (1 if p.is_completed else 0, p.todo_id))
             conn.commit()
             return True
         except Exception as e:
@@ -357,11 +421,11 @@ def update_todo_status(todo_id, is_completed):
             print(f"❌ 할일 완료여부 수정 실패: {e}")
             return False
 
-def delete_todo(todo_id):
+def delete_todo(p):
     with get_connection() as conn:
         try:
             c = conn.cursor()
-            c.execute("DELETE FROM todos WHERE id=?", (todo_id,))
+            c.execute("DELETE FROM todos WHERE id=?", (p.todo_id,))
 
             # print(f"✅ 삭제할 id 값: {todo_id}")
 
@@ -373,7 +437,7 @@ def delete_todo(todo_id):
             return False 
 
 # --- [4. 클럽 일정 관련 함수] ---
-def insert_club_schedule(data):
+def insert_club_schedule(p):
     with get_connection() as conn:
         try:
             c = conn.cursor()
@@ -385,20 +449,20 @@ def insert_club_schedule(data):
             """
             
             c.execute(query, (
-                data.get('userid'),
-                data.get('title'),
-                data.get('location'),
-                data.get('manager'),
-                data.get('start_date'),
-                data.get('end_date'),
-                data.get('content'),
-                data.get('color'),
-                data.get('use_alarm')
+                p.userid,
+                p.title,
+                p.location,
+                p.manager,
+                p.start_date,
+                p.end_date,
+                p.content,
+                p.color,
+                p.use_alarm
             ))
             
             # 2. 변경사항 확정
             conn.commit()
-            print(f"✅ 일정 저장 성공: {data.get('title')}")
+            print(f"✅ 일정 저장 성공: {p.title}")
             return True
             
         except Exception as e:
@@ -421,7 +485,7 @@ def get_all_schedules():
             return []
 
 # 클럽일정 수정        
-def update_schedule(data):
+def update_schedule(p):
     with get_connection() as conn:
         try:
             c = conn.cursor();
@@ -441,15 +505,15 @@ def update_schedule(data):
             """
 
             c.execute(query, (                
-                data.get('title'),
-                data.get('location'),
-                data.get('manager'),
-                data.get('start_date'),
-                data.get('end_date'),
-                data.get('content'),
-                data.get('color'),
-                data.get('use_alarm'),
-                data.get('id')
+                p.title,
+                p.location,
+                p.manager,
+                p.start_date,
+                p.end_date,
+                p.content,
+                p.color,
+                p.use_alarm,
+                p.id
             ))
 
             conn.commit()
@@ -476,7 +540,7 @@ def delete_schedule(eventId):
 
 # --- 5. 회원관리 관련 함수 ----
 # 회원등록
-def insert_member(data):
+def insert_member(p):
     with get_connection() as conn:
         try:
             c = conn.cursor()
@@ -486,18 +550,11 @@ def insert_member(data):
                 VALUES (?, ?, ?, ?, ?, ?)
             """
             
-            c.execute(query, (
-                data.get('name'),
-                data.get('phone'),
-                data.get('birth'),
-                data.get('member_class'),
-                1 if data.get('is_active') else 0,
-                data.get('created_by')                
-            ))
+            c.execute(query, (p.name, p.phone, p.birth, p.member_class, 1 if p.is_active else 0, p.created_by))
             
             # 2. 변경사항 확정
             conn.commit()
-            print(f"✅ 회원등록 성공: {data.get('name')}")
+            print(f"✅ 회원등록 성공: {p.name}")
             return True, "success"
         except sqlite3.IntegrityError:
             # 중복 에러
@@ -522,7 +579,7 @@ def get_all_members():
             return []
         
 # 회원 정보 업데이트
-def update_member(data):
+def update_member(p):
     with get_connection() as conn:
         try:
             c = conn.cursor();
@@ -539,12 +596,12 @@ def update_member(data):
             """
 
             c.execute(query, (                
-                data.get('name'),
-                data.get('phone'),
-                data.get('birth'),
-                data.get('member_class'),
-                data.get('is_active'),                
-                data.get('id')
+                p.name,
+                p.phone,
+                p.birth,
+                p.member_class,
+                p.is_active,                
+                p.id
             ))
 
             conn.commit()
@@ -569,13 +626,37 @@ def delete_member(memberId):
             print(f"❌ 회원 삭제 실패: {e}")
             return False
         
+# 회원별 결제내역 조회
+def get_member_payments(member_id):
+    with get_connection() as conn:
+        c = conn.cursor()
+        c.execute("""
+            SELECT id, pay_item, target_month, amount, is_paid
+            FROM payments 
+            WHERE member_id = ?
+            ORDER BY target_month DESC
+        """, (member_id,))
+
+        rows = c.fetchall()
+        result = []
+        for row in rows:
+            result.append({
+                "id": int(row["id"]),             # 명시적 int 변환
+                "pay_item": str(row["pay_item"]), 
+                "target_month": str(row["target_month"]),
+                "amount": int(row["amount"]),     # 여기서 에러가 날 확률이 높으므로 강제 형변환
+                "is_paid": bool(row["is_paid"])   # 0/1을 True/False로 변환
+            })
+        
+        # ⚠️ 중요: 리스트만 리턴하지 말고 'data' 키로 감싸주세요 (플러터 로직 일치용)
+        return {"status": "success", "data": result}
+        
 # ---------------- 공지사항 관련 DB CRUD ---------------
 
 # 1. 공지사항 조회
 def get_all_notices():
     with get_connection() as conn:
-        try:
-            conn.row_factory = sqlite3.Row            
+        try:               
             # 1. 중요 공지(is_important=1)를 가장 위로
             # 2. 그 다음 최신 등록순(id DESC 또는 created_at DESC)으로 정렬
             query = "SELECT * FROM notices ORDER BY is_important DESC, id DESC"
@@ -589,37 +670,39 @@ def get_all_notices():
             return []
 
 # 2. 공지사항 추가
-def add_notice(title, content, is_important, author_name):
+def add_notice(p):
     with get_connection() as conn:
         try:
-            conn.execute('INSERT INTO notices (title, content, is_important, author_name) VALUES (?, ?, ?, ?)',
-                        (title, content, 1 if is_important else 0, author_name))
+            c = conn.cursor()
+            c.execute('INSERT INTO notices (title, content, is_important, author_name) VALUES (?, ?, ?, ?)',
+                        (p.title, p.content, 1 if p.is_important else 0, p.author_name))
             conn.commit()
             # conn.close()  # with 문은 블록이 끝나는 순간 알아서 정리하고 닫아줌. 하지마삼.
         except Exception as e:
-            conn.rollback()
+            c.rollback()
             print(f"❌ 공지사항 등록 실패: {e}")
             return False
 
 
 # 3. 공지사항 수정
-def update_notice(notice_id, title, content, is_important):
+def update_notice(p):
     with get_connection() as conn:
         try:
-            conn.execute('UPDATE notices SET title = ?, content = ?, is_important = ? WHERE id = ?',
-                        (title, content, 1 if is_important else 0, notice_id))
+            c = conn.cursor();
+            c.execute('UPDATE notices SET title = ?, content = ?, is_important = ? WHERE id = ?',
+                        (p.title, p.content, 1 if p.is_important else 0, p.id))
             conn.commit()
             
         except Exception as e:
-            conn.rollback()
+            c.rollback()
             print(f"❌ 공지사항 수정 실패: {e}")
             return False
 
 # 4. 공지사항 삭제
-def delete_notice(notice_id):
+def delete_notice(p):
     with get_connection() as conn:
         try:
-            conn.execute('DELETE FROM notices WHERE id = ?', (notice_id,))
+            conn.execute('DELETE FROM notices WHERE id = ?', (p.id,))
             conn.commit()
             
         except Exception as e:
@@ -664,14 +747,14 @@ def get_member_out_stock(equipment_id, member_id):
     with get_connection() as conn:
         try:
             # 해당 회원의 출고(+) 수량과 출고취소(-) 수량을 합산하여 현재 보유량 계산
-            query = '''
+            query = """
                 SELECT 
                     SUM(CASE WHEN trade_type = '출고' THEN quantity 
                              WHEN trade_type = '출고취소' THEN -quantity 
                              ELSE 0 END) as current_out_stock
                 FROM equipment_history
                 WHERE equipment_id = ? AND member_id = ?
-            '''
+            """
             cursor = conn.execute(query, (equipment_id, member_id))
             row = cursor.fetchone()
             return row[0] if row[0] is not None else 0
@@ -689,13 +772,13 @@ def check_equipment_history_exists(equipment_id):
         return count > 0
 
 # [장비] 등록
-def add_equipment_db(name, spec, location, note, stock):
+def add_equipment_db(p):
     with get_connection() as conn:
         try:
             c = conn.cursor()
             c.execute("""INSERT INTO equipments (name, spec, location, note, stock)
                         VALUES (?, ?, ?, ?, ?)""", 
-                    (name, spec, location, note, stock))
+                    (p.name, p.spec, p.location, p.note, p.stock))
             conn.commit()
         except Exception as e:
             # 에러 발생 시 되돌리기
@@ -704,7 +787,7 @@ def add_equipment_db(name, spec, location, note, stock):
             return False 
 
 # [장비] 수정
-def update_equipment_db(equipment_id, name, spec, location, note):
+def update_equipment_db(p):
     with get_connection() as conn:        
         try:
             c = conn.cursor()
@@ -713,7 +796,7 @@ def update_equipment_db(equipment_id, name, spec, location, note):
                 SET name=?, spec=?, location=?, note=?
                 WHERE id=?
             """
-            c.execute(query, (name, spec, location, note, equipment_id))
+            c.execute(query, (p.name, p.spec, p.location, p.note, p.equipment_id))
             conn.commit()
             return True            
         except Exception as e:
@@ -737,7 +820,7 @@ def get_trade_history(equipment_id):
         c = conn.cursor()
         # history와 members를 JOIN하여 회원 이름을 가져옵니다.
         # members 테이블에 데이터가 없는 경우를 대비해 LEFT JOIN 사용
-        query = '''
+        query = """
             SELECT 
                 h.id,
                 h.trade_type,
@@ -754,13 +837,13 @@ def get_trade_history(equipment_id):
             LEFT JOIN members m ON h.member_id = m.id
             WHERE h.equipment_id = ?
             ORDER BY h.processed_at DESC
-        '''
+        """
         c.execute(query, (equipment_id,))
         rows = c.fetchall()
         
         return [dict(row) for row in rows]
 
-def add_trade_record(equipment_id, member_id, trade_type, quantity, unit_price, total_price, note, processed_by):
+def add_trade_record(p):
     """
     입출고 기록 저장 및 장비 재고 업데이트
     """
@@ -775,13 +858,13 @@ def add_trade_record(equipment_id, member_id, trade_type, quantity, unit_price, 
                 (equipment_id, member_id, trade_type, quantity, unit_price, total_price, note, processed_by, processed_at)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, DATETIME('now', 'localtime'))
             """
-            c.execute(history_query, (equipment_id, member_id, trade_type, quantity, unit_price, total_price, note, processed_by))                
+            c.execute(history_query, (p.equipment_id, p.member_id, p.trade_type, p.quantity, p.unit_price, p.total_price, p.note, p.processed_by))                
 
             # 2. 장비 마스터(equipments) 테이블 재고 업데이트
             # 입고면 +, 출고면 - 계산
-            op = "+" if trade_type == "입고" else "-"
+            op = "+" if p.trade_type == "입고" else "-"
             update_query = f"UPDATE equipments SET stock = stock {op} ? WHERE id = ?"
-            c.execute(update_query, (quantity, equipment_id))
+            c.execute(update_query, (p.quantity, p.equipment_id))
 
             conn.commit() # 모든 작업이 성공하면 확정!
             return True, "저장 완료"
@@ -807,8 +890,65 @@ def get_active_members_db():
             print(f"❌ 활동회원 목록 조회 실패: {e}")
             return []
         
+# --------------- 결제 관련 CRUD -------------------
+# 결제 등록 로직
+def add_payment(p):
+    with get_connection() as conn:
+        try:
+            c = conn.cursor()
+            c.execute("""
+                INSERT INTO payments (
+                    member_id, name, pay_item, target_month, amount, is_paid, note, created_by
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """, (p.member_id, p.name, p.pay_item, p.target_month, 
+                  p.amount, 1 if p.is_paid else 0, p.note, p.created_by))
+            conn.commit()
+            return True
+        except Exception as e:
+            print(f"Database Error (add_payment): {e}")
+            return False
+
+# 전체 결제 목록 조회 로직
+def get_all_payments():
+    with get_connection() as conn:
+        c = conn.cursor()
+        c.execute("""
+            SELECT id, member_id, name, pay_item, target_month, amount, is_paid, note, created_at 
+            FROM payments 
+            ORDER BY target_month DESC, created_at DESC
+        """)
+        rows = c.fetchall()
+        return [dict(row) for row in rows]
+    
+def update_payment(p):
+    with get_connection() as conn:
+        try:
+            c = conn.cursor();
+            c.execute("""
+                UPDATE payments 
+                SET pay_item = ?, amount = ?, is_paid = ?, note = ? 
+                WHERE id = ?
+            """, (p.pay_item, p.amount, 1 if p.is_paid else 0, p.note, p.id))
+            conn.commit()
+            return True
+        except Exception as e:
+            print(f"에러 발생 상세 내역: {e}")
+            return False
+
+def delete_payment(p):
+    with get_connection() as conn:
+        try:
+            c = conn.cursor();
+            c.execute('DELETE FROM payments WHERE id = ?', (p.id,))
+            conn.commit()
+            return True
+        except Exception as e:
+            print(f"에러 발생 상세 내역: {e}")
+            return False
+        
 # --------------- 데이터 마이그레이션 ---------------
 
+# 회원리스트 업로드
 def upload_members_from_list(member_list, admin_id):
     with get_connection() as conn:
         
@@ -833,4 +973,79 @@ def upload_members_from_list(member_list, admin_id):
             conn.rollback()
             print(f"Migration Error: {e}")
             return False, 0       
+
+# TODO: 결제 정보 일괄 업로드
+
+
+# --------------- Q&A CRUD ---------------
+# 질문 등록
+def add_qna(p):
+    with get_connection() as conn:
+        try:
+            c = conn.cursor()
+            query = """
+                INSERT INTO qna (title, content, author_id, author_name, fcm_token)
+                VALUES (?, ?, ?, ?, ?)
+            """
+            c.execute(query, (p.title, p.content, p.author_id, p.author_name, p.fcm_token))
+            conn.commit()
+            return True
+        except Exception as e:
+            print(f"❌ Q&A 등록 에러: {e}")
+            return False
+
+# 질문 수정 (답변 전 본인만 가능)
+def update_qna(p):
+    with get_connection() as conn:
+        try:
+            c = conn.cursor()
+            # 답변이 없을(is_answered=0) 때만 수정 가능하게 쿼리에서 방어
+            query = "UPDATE qna SET title = ?, content = ? WHERE id = ? AND is_answered = 0"
+            c.execute(query, (p.title, p.content, p.id))
+            conn.commit()
+            return c.rowcount > 0 # 실제 수정된 행이 있는지 확인
+        except Exception as e:
+            print(f"❌ Q&A 수정 에러: {e}")
+            return False
+
+# 답변 등록 (관리자용)
+def answer_qna(p):
+    with get_connection() as conn:
+        try:
+            c = conn.cursor()
+            query = "UPDATE qna SET answer = ?, is_answered = 1, updated_at = datetime('now', 'localtime') WHERE id = ?"
+            c.execute(query, (p.answer, p.id))
+            conn.commit()
             
+            # 알림을 보내기 위해 fcm_token 정보 조회 후 반환
+            c.execute("SELECT fcm_token, title FROM qna WHERE id = ?", (p.id,))
+
+            return c.fetchone() 
+        except Exception as e:
+            print(f"❌ 답변 등록 에러: {e}")
+            return None
+        
+def delete_qna(id):
+    with get_connection() as conn:
+        try:
+            c = conn.cursor();
+            c.execute('DELETE FROM qna WHERE id = ?', (id,))
+            conn.commit()
+            return True
+        except Exception as e:
+            conn.rollback()
+            print(f"에러 발생 상세 내역: {e}")
+            return False
+        
+# --------------- 로그인 시 토큰 값 업데이트 ---------------
+def update_user_token(p):
+    with get_connection() as conn:
+        try:
+            c = conn.cursor()
+            # users 테이블의 해당 사용자 ID에 토큰을 저장
+            c.execute("UPDATE users SET fcm_token = ? WHERE userid = ?", (p.fcm_token, p.user_id))
+            conn.commit()
+            return True
+        except Exception as e:
+            print(f"토큰 업데이트 에러: {e}")
+            return False        

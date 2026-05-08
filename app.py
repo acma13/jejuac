@@ -13,8 +13,9 @@ import os
 import firebase_admin
 import io
 import pandas as pd
+import asyncio
 from firebase_admin import credentials, messaging
-from config import initialize_firebase, FCM_TOPIC_NAME, FRONTEND_PATH
+from config import initialize_firebase, FCM_TOPIC_NAME, FRONTEND_PATH, FCM_ADMIN_TOPIC
 
 # 4. 초기화: DB 연결
 # 1. 서버가 켜질 때와 꺼질 때 할 일을 정의하는 'Lifespan' 함수
@@ -53,6 +54,25 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# def send_fcm_notification(token, title, body):
+#     """
+#     FCM 토큰을 사용하여 특정 기기에 푸시 알림을 전송합니다.
+#     """
+#     try:
+#         message = messaging.Message(
+#             notification=messaging.Notification(
+#                 title=title,
+#                 body=body,
+#             ),
+#             token=token,
+#         )
+#         response = messaging.send(message)
+#         print(f'✅ 알림 전송 성공: {response}')
+#         return True
+#     except Exception as e:
+#         print(f'❌ 알림 전송 실패: {e}')
+#         return False
+
 # -------------- 공지사항 알림 관련 start ---------------
 # 1. Firebase 초기화 (파일명 확인!)
 
@@ -75,38 +95,46 @@ app.add_middleware(
 initialize_firebase()
 
 # 2. 웹 푸시 발송 함수
-async def send_notice_push(title, content, is_important):
+async def send_fcm_notification(p_data):
     try:
-        prefix = "📢 [중요] " if is_important else "🔔 [공지] "
-        
+        # 1. 공통 데이터 추출 (add_notice나 add_qna에서 보낸 값들)
+        title = p_data.get("title")
+        body = p_data.get("body")
+        data_type = p_data.get("type", "notice")  # 구분자 (기본값 notice)
+        token = p_data.get("token")
+        target_topic = p_data.get("target")       # FCM_TOPIC_NAME 또는 FCM_ADMIN_TOPIC
+
+        # 2. 메시지 구성 (아이폰 중복 방지를 위해 notification은 주석 유지) [cite: 2]
         message = messaging.Message(
-            # 1. notification 객체는 반드시 있어야 브라우저가 인식합니다.
-            notification=messaging.Notification(
-                title=f"{prefix}{title}",
-                body="새로운 공지사항이 등록되었습니다.",
-            ),
-            # 2. 'data' 필드도 함께 보내야 Flutter의 onMessage가 더 잘 낚아챕니다.
             data={
-                "title": f"{prefix}{title}",
-                "body": "새로운 공지사항이 등록되었습니다.",
+                "title": title,
+                "body": body,
+                "type": data_type                
             },
-            # 3. ⭐ 웹 전용 설정 (WebpushConfig) - 이게 없으면 웹에서 누락되는 경우가 많습니다.
             webpush=messaging.WebpushConfig(
-                # fcm_options=messaging.WebpushFCMOptions(
-                #     link="/" # 알림 클릭 시 이동할 경로
-                # ),
                 notification=messaging.WebpushNotification(
-                    body="새로운 공지사항이 등록되었습니다.",
-                    icon="/icons/bow-and-arrow.png",
-                    tag="jejuac-notification"
+                    # fcm_options=messaging.WebpushFCMOptions(
+                    #     link="/" # 클릭 시 이동할 기본 경로
+                    # ),
                 ),
-            ),
-            topic=FCM_TOPIC_NAME, # 서버 변수 FCM_TOPIC_NAME이 "club_all"인지 꼭 확인!
+            ),            
         )
+
+        if token:
+            message.token = token
+            print(f"📱 개인 토큰으로 발송 시도: {token[:10]}...")
+        elif target_topic:
+            message.topic = target_topic
+            print(f"📢 토픽으로 발송 시도: {target_topic}")
+        else:
+            print("⚠️ 발송 대상(token 또는 target)이 없습니다.")
+            return
+        
         response = messaging.send(message)
-        print(f"🚀 푸시 발송 완료: {response}")
+        print(f"🚀 푸시 발송 성공 ({data_type}): {response}")
     except Exception as e:
         print(f"❌ 푸시 발송 실패: {e}")
+
 
 @app.post("/api/register_token")
 async def register_token(data: dict):
@@ -125,6 +153,23 @@ async def register_token(data: dict):
         print(f"❌ 구독 처리 에러: {e}")
         return {"status": "error", "message": str(e)}
 
+class TokenUpdateRequest(BaseModel):
+    user_id: str
+    fcm_token: str
+    user_role: str
+
+@app.post("/api/update_fcm_token")
+async def update_fcm_token(req: TokenUpdateRequest):
+       
+    if db.update_user_token(req):
+        if req.user_role == "Admin":
+            try:
+                messaging.subscribe_to_topic([req.fcm_token], FCM_ADMIN_TOPIC)
+                print(f"🎯 관리자 토픽 강제 구독 성공: {req.user_id}")
+            except Exception as e:
+                print(f"❌ 관리자 토픽 구독 실패: {e}")
+        return {"success": True}
+    return {"success": False}
     
 # -------------- 공지사항 알림 관련 end ---------------
 
@@ -240,13 +285,13 @@ def update_profile(req: UpdateProfileRequest):
     # [단계 1] DB에서 해당 유저의 현재 정보를 가져옴
     user = db.get_user_by_id(req.userid)
     if not user:
-        print("1")
+        #print("1")
         return {"success": False, "message": "사용자를 찾을 수 없습니다."}
 
     # [단계 2] 현재 비밀번호가 맞는지 검증 (auth.py의 check_hashes 활용)
     # user['password']는 DB에 저장된 해시값입니다.
     if not auth.check_hashes(req.current_password, user['password']):
-        print("2")
+        #print("2")
         return {"success": False, "message": "현재 비밀번호가 일치하지 않습니다."}
 
     # [단계 3] DB 업데이트 실행
@@ -261,8 +306,36 @@ def update_profile(req: UpdateProfileRequest):
     if result:
         return {"success": True, "message": "성공적으로 수정되었습니다!"}
     else:
-        print("3")
+        #print("3")
         return {"success": False, "message": "DB 업데이트 중 오류가 발생했습니다."}
+    
+# --------- 가입된 유저 관련 ---------------
+class RoleUpdateRequest(BaseModel):
+    userid: str
+    role: str
+
+class UserDeleteRequest(BaseModel):
+    userid: str  # 화면에서 보내는 키값과 일치해야 함
+
+# 등록된 모든 유저 정보
+@app.get("/api/get_all_users")
+async def get_all_users():
+    return {"status": "success", "data": db.get_all_users()}
+
+# 유저 권한 수정
+@app.post("/api/update_user_role")
+async def update_user_role(req: RoleUpdateRequest):
+    if db.update_user_role(req):
+        return {"status": "success", "message": "권한이 변경되었습니다."}
+    return {"status": "error", "message": "수정 실패"}
+
+# 유저 삭제
+@app.post("/api/delete_user")
+async def delete_user(req: UserDeleteRequest):
+    
+    if db.delete_user(req):
+        return {"status": "success", "message": "사용자가 삭제되었습니다."}
+    return {"status": "error", "message": "삭제 실패"}
     
 # 등록된 클럽 일정 조회
 @app.get("/api/get_schedules")
@@ -290,7 +363,7 @@ class deleteScheduleRequest(BaseModel):
 async def insert_club_schedule(req: scheduleRequest):
 
     try:
-        result = db.insert_club_schedule(req.model_dump())
+        result = db.insert_club_schedule(req)
         if result:
             return {"status": "success"}
         else:
@@ -308,7 +381,7 @@ async def api_update_schedule(req: scheduleRequest):
             return {"success": False, "message": "수정할 일정 ID가 없습니다."}
 
         # 3. DB 업데이트 함수 호출
-        result = db.update_schedule(req.model_dump())
+        result = db.update_schedule(req)
 
         if result:
             return {"success": True, "message": "일정이 성공적으로 수정되었습니다."}
@@ -362,12 +435,12 @@ class modifyMember(BaseModel):
     member_class: str
     is_active: bool
 
-class deleteMember(BaseModel):
+class memberIdRequest(BaseModel):
     id: int
 
 @app.post("/api/insert_member")
 async def insert_member(req: addMember):
-    success, message = db.insert_member(req.model_dump())
+    success, message = db.insert_member(req)
     
     if success:
         return {"status": "success"}
@@ -381,7 +454,7 @@ async def get_members():
     memberlist = db.get_all_members()
     return memberlist
 
-# 클럽 일정 수정
+# 회원 정보 수정
 @app.post("/api/update_member")
 async def update_member(req: modifyMember):
     try:
@@ -391,7 +464,7 @@ async def update_member(req: modifyMember):
             return {"success": False, "message": "수정할 회원 ID가 없습니다."}
 
         # 3. DB 업데이트 함수 호출
-        result = db.update_member(req.model_dump())
+        result = db.update_member(req)
 
         if result:
             return {"success": True, "message": "회원정보가 성공적으로 수정되었습니다."}
@@ -403,7 +476,7 @@ async def update_member(req: modifyMember):
         return {"success": False, "message": str(e)}
  
 @app.post("/api/delete_member")
-async def delete_member(req: deleteMember):
+async def delete_member(req: memberIdRequest):
     try:
         # 1. 삭제할 ID 데이터 받기 {"id": "123"}
         # data = await request.json()
@@ -423,6 +496,11 @@ async def delete_member(req: deleteMember):
     except Exception as e:
         print(f"❌ 삭제 API 에러: {e}")
         return {"success": False, "message": str(e)}
+    
+@app.get("/api/get_member_payments/{member_id}")
+async def get_member_payments(member_id: int):        
+    data = db.get_member_payments(member_id)
+    return data
     
 # ------ 공지사항 관련 API ----------
 
@@ -444,13 +522,19 @@ class DeleteNoticeRequest(BaseModel):
 @app.post("/api/add_notice")
 async def add_notice(req: NoticeRequest):
     try:
-        db.add_notice(req.title, req.content, req.is_important, req.author_name)
-        print("[Add_notice] 1. DB 저장 성공 (세션 생존 확인)")
+        db.add_notice(req)
+        #print("[Add_notice] 1. DB 저장 성공 (세션 생존 확인)")
         # 저장 성공 후 푸시 알림 발송
         try:
-            print("[Add_notice] 2. 푸시 발송 시도...")
-            await send_notice_push(req.title, req.content, req.is_important)
-            print("[Add_notice] 3. 푸시 발송 로직 통과")
+            #print("[Add_notice] 2. 푸시 발송 시도...")
+            push_data = {
+                "target": FCM_TOPIC_NAME,      # 전체 공지 토픽
+                "title": f"🔔 [공지] {req.title}",
+                "body": "새로운 공지사항이 등록되었습니다.",
+                "type": "notice_alert"
+            }
+            asyncio.create_task(send_fcm_notification(push_data))
+            #print("[Add_notice] 3. 푸시 발송 로직 통과")
         except Exception as push_e:
             print(f"[Add_notice] 4. 푸시만 실패(DB는 성공): {push_e}")
 
@@ -462,7 +546,7 @@ async def add_notice(req: NoticeRequest):
 @app.post("/api/update_notice")
 async def update_notice(req: UpdateNoticeRequest):
     try:
-        db.update_notice(req.id, req.title, req.content, req.is_important)
+        db.update_notice(req)
         return {"status": "success", "message": "공지가 수정되었습니다."}
     except Exception as e:
         return {"status": "error", "message": str(e)}
@@ -470,7 +554,7 @@ async def update_notice(req: UpdateNoticeRequest):
 @app.post("/api/delete_notice")
 async def delete_notice(req: DeleteNoticeRequest):
     try:
-        db.delete_notice(req.id)
+        db.delete_notice(req)
         return {"status": "success", "message": "공지가 삭제되었습니다."}
     except Exception as e:
         return {"status": "error", "message": str(e)}
@@ -525,10 +609,7 @@ async def get_todos():
 @app.post("/api/add_todo")
 async def add_todo(req: TodoAddRequest):
     try:
-        result = db.add_todo(
-            req.title, req.due_date, req.assignee, 
-            req.content, req.attachment_url, req.created_by
-        )
+        result = db.add_todo(req)
 
         # TODO: 등록 시 알람 쏘는거 만들어야 함.
         #       공지 쏘던거랑 같이 쓰면 될 것 같은데 이 부분은 수정이 필요해보임.
@@ -544,9 +625,7 @@ async def add_todo(req: TodoAddRequest):
 @app.post("/api/update_todo_content")
 async def update_content(req: TodoContentUpdateRequest): 
     try:
-        result = db.update_todo_content(
-            req.id, req.title, req.due_date, req.assignee, req.content, req.attachment_url
-        )
+        result = db.update_todo_content(req)
         return {"success": result}
     except Exception as e:
         print(f"Update Content Error: {e}")
@@ -556,7 +635,7 @@ async def update_content(req: TodoContentUpdateRequest):
 @app.post("/api/update_todo_status")
 async def update_status(req: TodoStatusUpdateRequest): 
     try:
-        result = db.update_todo_status(req.id, req.is_completed)
+        result = db.update_todo_status(req)
         return {"success": result}
     except Exception as e:
         print(f"Update Status Error: {e}")
@@ -568,7 +647,7 @@ async def delete_todo_api(req: TodoDeleteRequest):
     try: 
         # print(f"API 의 할 일 삭제 ID: {req.id}")
 
-        result = db.delete_todo(req.id)
+        result = db.delete_todo(req)
 
         return {"success": "success", "message": "할 일이 삭제되었습니다."}
     except Exception as e:
@@ -657,7 +736,7 @@ async def api_get_equipments():
 @app.post("/api/add_equipment")
 async def api_add_equipment(req: EquipmentAddRequest):    
     try:
-        result = db.add_equipment_db(req.name, req.spec, req.location, req.note, req.stock)
+        result = db.add_equipment_db(req)
         
         if result:
             return {"status": "success"}
@@ -672,7 +751,7 @@ async def api_add_equipment(req: EquipmentAddRequest):
 async def api_update_equipment(req: EquipmentUpdateRequest):
     # update_equipment_db(data['id'], data)    
     try:
-        result = db.update_equipment_db(req.id, req.name, req.spec, req.location, req.note)
+        result = db.update_equipment_db(req)
         return {"success": result}
     except Exception as e:
         print(f"Update Content Error: {e}")
@@ -703,7 +782,7 @@ async def api_get_trade_list(equipmentId: int):
 @app.post("/api/add_trade_list")
 async def api_add_trade(req: AddTradeInfoRequest):    
     # database.py에 만든 함수 호출
-    success, msg = db.add_trade_record(req.equipment_id, req.member_id, req.trade_type, req.quantity, req.unit_price, req.total_price, req.note, req.processed_by)
+    success, msg = db.add_trade_record(req)
     
     if success:
         return {"success": True, "message": msg}
@@ -711,6 +790,58 @@ async def api_add_trade(req: AddTradeInfoRequest):
         # 실패 시 400 에러나 500 에러를 줄 수도 있지만, 
         # 우선 success: False로 처리해서 플러터에서 메시지를 띄우게 합니다.
         return {"success": False, "message": msg}
+
+# ---------------- 결제 관련 API ------------------------------
+
+class AddPaymentRequest(BaseModel):
+    member_id: int
+    name: str
+    pay_item: str
+    target_month: Optional[str] = ""
+    amount: int
+    is_paid: bool
+    note: Optional[str] = ""
+    created_by: str
+
+class UpdatePaymentRequest(BaseModel):
+    id: int
+    pay_item: str
+    amount: int
+    is_paid: bool
+    note: str
+
+class deletePaymentRequest(BaseModel):
+    id: int
+
+@app.post("/api/add_payment")
+async def api_add_payment(req: AddPaymentRequest):
+    # TODO : 여기처럼 클래스를 넘겨줄 수 있음. 이것 참조해서 나머지도 다 바꿀 것
+    if db.add_payment(req):         
+        return {"status": "success", "message": "결제 정보가 등록되었습니다."}
+    else:
+        return {"status": "error", "message": "등록 실패"}
+
+@app.get("/api/get_payments")
+async def api_get_payments():
+    data = db.get_all_payments()
+    return data
+
+@app.post("/api/update_payment")
+async def api_update_payment(req: UpdatePaymentRequest):
+    success = db.update_payment(req)
+    if success:
+        return {"status": "success", "message": "결제 정보가 수정되었습니다."}
+    else:
+        raise HTTPException(status_code=500, detail="수정에 실패했습니다.")
+
+@app.post("/api/delete_payment")
+async def api_delete_payment(req: deletePaymentRequest):
+           
+    success = db.delete_payment(req)
+    if success:
+        return {"status": "success", "message": "결제 정보가 삭제되었습니다."}
+    else:
+        raise HTTPException(status_code=500, detail="삭제에 실패했습니다.")
 
 
 # ---------------- 데이터 마이그레이션 관련 API ----------------
@@ -778,3 +909,99 @@ async def upload_members_list(req: MigrationRequest):
     except Exception as e:
         print(f"❌ 마이그레이션 에러: {e}")
         raise HTTPException(status_code=500, detail=f"시트 읽기 실패: {str(e)}")
+    
+
+# ---------------- Q&A 관련 API ----------------    
+
+class QnaCreateRequest(BaseModel):
+    title: str
+    content: str
+    author_id: str
+    author_name: str
+    fcm_token: Optional[str] = None
+
+class QnaAnswerRequest(BaseModel):
+    id: int
+    answer: str
+
+class QnaUpdateRequest(BaseModel):
+    id: int
+    title: str
+    content: str
+
+@app.post("/api/add_qna")
+async def api_add_qna(req: QnaCreateRequest):    
+    if db.add_qna(req):
+        # 질문 등록 성공 후 관리자들에게 알림 전송
+        try:
+            push_data = {
+                "target": FCM_ADMIN_TOPIC,     # 관리자용 토픽
+                "title": f"'{req.author_name}' 님의 질문: {req.title}",
+                "body": "❓ 새 질문이 등록되었습니다.",
+                "type": "admin_qna_alert"                
+            }
+
+            asyncio.create_task(send_fcm_notification(push_data))
+
+            print("🎯 관리자 알림 전송 완료 (Topic: admin_notifications)")
+        except Exception as e:
+            print(f"❌ 관리자 알림 전송 실패: {e}")
+
+        return {"success": True}
+    raise HTTPException(status_code=500, detail="등록 실패")
+
+@app.post("/api/answer_qna")
+async def api_answer_qna(req: QnaAnswerRequest):
+    result = db.answer_qna(req)
+    print(f"등록 결좌 조회 : {result}")
+    if result:
+        # result['fcm_token']으로 푸시 알림 발송 로직 추가 (Firebase 서비스 호출)
+        # send_fcm_notification(result['fcm_token'], "문의 답변 완료", f"[{result['title']}] 글에 답변이 등록되었습니다.")
+        fcm_token, qna_title = result
+        print(f"토큰 값 조회 : {fcm_token}")
+        print(f"타이틀 조회 : {qna_title}")
+        # 2. 질문자의 토큰이 존재할 경우 알림 발송
+        if fcm_token:
+            try:
+                push_data = {
+                    "token": fcm_token,     
+                    "title": "Q&A 답변 등록 완료",
+                    "body": f"문의하신 '{qna_title}'에 대한 답변이 등록되었습니다.",
+                    "type": "answer_qna_alert"                
+                }
+
+                asyncio.create_task(send_fcm_notification(push_data))
+                
+            except Exception as e:
+                print(f"알림 발송 실패: {e}")
+        return {"success": True}
+    return {"success": False}
+
+@app.post("/api/update_qna")
+async def api_update_qna(req: QnaUpdateRequest):    
+    if db.update_qna(req):
+        return {"success": True}
+    raise HTTPException(status_code=500, detail="수정 실패")
+
+
+# Q&A 목록 조회 (최신순)
+@app.get("/api/get_qna_list")
+async def get_qna_list():
+    with db.get_connection() as conn:
+        c = conn.cursor()
+        # 제목, 작성자, 답변여부, 날짜만 가볍게 가져옴
+        c.execute("""
+            SELECT id, title, content, author_id, author_name, answer, is_answered, created_at 
+            FROM qna 
+            ORDER BY created_at DESC
+        """)
+        return [dict(row) for row in c.fetchall()]
+
+# Q&A 삭제 (답변 전 본인 또는 관리자)
+@app.post("/api/delete_qna/{qna_id}")
+async def delete_qna(qna_id: int):
+    # DB 함수에서 권한 체크 후 삭제 로직 수행
+    success = db.delete_qna(qna_id)
+    if success:
+        return {"success": True}
+    raise HTTPException(status_code=400, detail="삭제할 수 없는 상태이거나 권한이 없습니다.")

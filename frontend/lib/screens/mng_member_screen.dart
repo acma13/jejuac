@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:intl/intl.dart';
 import 'dart:convert'; // jsonEncode 쓰기 위해 필요.
 import 'package:http/http.dart' as http; // http.post 를 쓰기 위해 필요.
 import '/constants.dart';
@@ -18,6 +19,10 @@ class MngMemberScreen extends StatefulWidget {
 class _MngMemberScreenState extends State<MngMemberScreen> {
   // 1. 원본 데이터 (나중에 DB에서 가져올 데이터)
   List<Map<String, dynamic>> members = [];
+  bool _isLoading = true;
+  //  final NumberFormatter _formatter = NumberFormatter();
+  final _formatter = NumberFormat('#,###');
+
   // 서버에서 회원 목록 가져오기
   Future<void> _fetchMembers() async {
     try {
@@ -30,6 +35,8 @@ class _MngMemberScreenState extends State<MngMemberScreen> {
       }
     } catch (e) {
       print("데이터 로딩 실패: $e");
+    } finally {
+      setState(() => _isLoading = false);
     }
   }
 
@@ -152,32 +159,22 @@ class _MngMemberScreenState extends State<MngMemberScreen> {
       debugPrint("❌ 삭제 실패: $e");
     }
   }
-  // 삭제 확인 다이얼로그.
-  void _showDeleteConfirmDialog(BuildContext context, dynamic memberId) {
-    showDialog(
-      context: context,
-      builder: (BuildContext context) {
-        return AlertDialog(
-          title: const Text("회원 삭제"),
-          content: const Text("정말 이 회원을 삭제하시겠습니까?\n삭제된 데이터는 복구할 수 없습니다."),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context), // 취소
-              child: const Text("취소", style: TextStyle(color: Colors.grey)),
-            ),
-            ElevatedButton(
-              style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
-              onPressed: () async {
-                Navigator.pop(context); // 다이얼로그 닫기
-                await _confirmDelete(memberId); // 🏹 실제 삭제 API 호출
-              },
-              child: const Text("삭제", style: TextStyle(color: Colors.white)),
-            ),
-          ],
-        );
-      },
-    );
-  }  
+
+  // [2] 특정 회원의 결제 내역만 가져오는 함수
+  Future<List<dynamic>> _fetchMemberPayments(dynamic memberId) async {
+    try {
+      // Config에 getMemberPayments API가 정의되어 있다고 가정합니다.
+      final response = await http.get(Uri.parse("${Config.getMemberPayments}/$memberId"));
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        return data['data'] ?? [];
+      }
+    } catch (e) {
+      debugPrint("결제 정보 로드 실패: $e");
+    }
+    return [];
+  }
+    
 
   // -------------- 화면 빌드 영역 ----------------
   @override
@@ -214,133 +211,135 @@ class _MngMemberScreenState extends State<MngMemberScreen> {
           
           // 2. 표 영역 (카드 디자인 적용)
           Expanded(
-            child: members.isEmpty
-              ? Center(
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(Icons.group_off, size: 64, color: Colors.grey[400]),
-                    const SizedBox(height: 16),
-                    Text(
-                      "등록된 회원이 없습니다.",
-                      style: TextStyle(fontSize: 18, color: Colors.grey[600], fontWeight: FontWeight.bold),
-                    ),
-                    const SizedBox(height: 8),
-                    Text("우측 하단 + 버튼을 눌러 회원을 등록해주세요.",
-                        style: TextStyle(color: Colors.grey[500])),
-                  ],
-                ),
-              )
-              :  SingleChildScrollView(
-              scrollDirection: Axis.vertical,
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 8.0),
-                child: Card(
-                  elevation: 3,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
-                  clipBehavior: Clip.antiAlias, // 카드 모서리에 맞춰 표 깎기
-                  child: SingleChildScrollView(
-                    scrollDirection: Axis.horizontal,
-                    child: DataTable(
-                      sortColumnIndex: sortColumnIndex,
-                      sortAscending: isAscending,
-                      showCheckboxColumn: false,
-                      // --- 헤더 디자인 ---
-                      headingRowColor: WidgetStateProperty.all(Colors.green[800]),
-                      headingTextStyle: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
-                      columnSpacing: 25,
-                      columns: [
-                        DataColumn(
-                          label: const Text('이름'),
-                          onSort: _onSort,
-                        ),
-                        const DataColumn(label: Text('연락처')),
-                        DataColumn(
-                          label: Row(
-                            children: [
-                              const Text('클래스'),
-                              PopupMenuButton<String>(
-                                icon: const Icon(Icons.filter_alt_outlined, size: 18, color: Colors.white70),
-                                onSelected: (value) => setState(() => selectedClass = value),
-                                itemBuilder: (context) => ["전체", "선수반", "취미반"].map((v) => 
-                                  PopupMenuItem(value: v, child: Text(v))
-                                ).toList(),
-                              ),
-                            ],
+            child: _isLoading
+              ? const Center(child: CircularProgressIndicator()) 
+              : members.isEmpty
+                ? Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.group_off, size: 64, color: Colors.grey[400]),
+                      const SizedBox(height: 16),
+                      Text(
+                        "등록된 회원이 없습니다.",
+                        style: TextStyle(fontSize: 18, color: Colors.grey[600], fontWeight: FontWeight.bold),
+                      ),
+                      const SizedBox(height: 8),
+                      Text("우측 하단 + 버튼을 눌러 회원을 등록해주세요.",
+                          style: TextStyle(color: Colors.grey[500])),
+                    ],
+                  ),
+                )
+                :  SingleChildScrollView(
+                scrollDirection: Axis.vertical,
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 8.0),
+                  child: Card(
+                    elevation: 3,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+                    clipBehavior: Clip.antiAlias, // 카드 모서리에 맞춰 표 깎기
+                    child: SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      child: DataTable(
+                        sortColumnIndex: sortColumnIndex,
+                        sortAscending: isAscending,
+                        showCheckboxColumn: false,
+                        // --- 헤더 디자인 ---
+                        headingRowColor: WidgetStateProperty.all(Colors.green[800]),
+                        headingTextStyle: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                        columnSpacing: 25,
+                        columns: [
+                          DataColumn(
+                            label: const Text('이름'),
+                            onSort: _onSort,
                           ),
-                        ),
-                        const DataColumn(label: Text('생년월일')),
-                        DataColumn(
-                          label: Row(
-                            children: [
-                              const Text('활동여부'),
-                              PopupMenuButton<String>(
-                                icon: const Icon(Icons.filter_alt_outlined, size: 18, color: Colors.white70),
-                                onSelected: (value) => setState(() => selectedStatus = value),
-                                itemBuilder: (context) => ["전체", "활동중", "비활동"].map((v) => 
-                                  PopupMenuItem(value: v, child: Text(v))
-                                ).toList(),
-                              ),
-                            ],
+                          const DataColumn(label: Text('연락처')),
+                          DataColumn(
+                            label: Row(
+                              children: [
+                                const Text('클래스'),
+                                PopupMenuButton<String>(
+                                  icon: const Icon(Icons.filter_alt_outlined, size: 18, color: Colors.white70),
+                                  onSelected: (value) => setState(() => selectedClass = value),
+                                  itemBuilder: (context) => ["전체", "선수반", "취미반"].map((v) => 
+                                    PopupMenuItem(value: v, child: Text(v))
+                                  ).toList(),
+                                ),
+                              ],
+                            ),
                           ),
-                        ),
-                      ],
-                      // --- 행 디자인 (줄무늬 효과 적용) ---
-                      rows: _filteredMembers.asMap().entries.map((entry) {
-                        int index = entry.key;
-                        var member = entry.value;
-                        
-                        return DataRow(
-                          onSelectChanged: (_) => _showMemberDetail(member),
-                          // 짝수 줄에만 아주 연한 녹색 배경을 줘서 줄무늬 효과
-                          color: WidgetStateProperty.all(index % 2 == 0 ? Colors.white : Colors.green.withValues(alpha: 0.05)),
-                          cells: [
-                            DataCell(Text(member['name'] ?? "이름 없음", style: const TextStyle(fontWeight: FontWeight.bold))),
-                            DataCell(Text(member['phone'] ?? "연락처 없음")),
-                            DataCell(
-                              Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                                decoration: BoxDecoration(
-                                  // 1. null 체크: member['class']가 null이면 '취미반'으로 가정하고 비교
-                                  color: (member['class'] ?? '취미반') == '선수반' ? Colors.orange[50] : Colors.blue[50],
-                                  borderRadius: BorderRadius.circular(12),
-                                  // 2. ! 대신 ?? 를 사용하여 null일 때 안전하게 기본 색상을 지정
-                                  border: Border.all(
-                                    color: (member['class'] ?? '취미반') == '선수반' 
-                                        ? (Colors.orange[200] ?? Colors.orange) 
-                                        : (Colors.blue[200] ?? Colors.blue)
+                          const DataColumn(label: Text('생년월일')),
+                          DataColumn(
+                            label: Row(
+                              children: [
+                                const Text('활동여부'),
+                                PopupMenuButton<String>(
+                                  icon: const Icon(Icons.filter_alt_outlined, size: 18, color: Colors.white70),
+                                  onSelected: (value) => setState(() => selectedStatus = value),
+                                  itemBuilder: (context) => ["전체", "활동중", "비활동"].map((v) => 
+                                    PopupMenuItem(value: v, child: Text(v))
+                                  ).toList(),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                        // --- 행 디자인 (줄무늬 효과 적용) ---
+                        rows: _filteredMembers.asMap().entries.map((entry) {
+                          int index = entry.key;
+                          var member = entry.value;
+                          
+                          return DataRow(
+                            onSelectChanged: (_) => _showMemberDetail(member),
+                            // 짝수 줄에만 아주 연한 녹색 배경을 줘서 줄무늬 효과
+                            color: WidgetStateProperty.all(index % 2 == 0 ? Colors.white : Colors.green.withValues(alpha: 0.05)),
+                            cells: [
+                              DataCell(Text(member['name'] ?? "이름 없음", style: const TextStyle(fontWeight: FontWeight.bold))),
+                              DataCell(Text(member['phone'] ?? "연락처 없음")),
+                              DataCell(
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                  decoration: BoxDecoration(
+                                    // 1. null 체크: member['class']가 null이면 '취미반'으로 가정하고 비교
+                                    color: (member['class'] ?? '취미반') == '선수반' ? Colors.orange[50] : Colors.blue[50],
+                                    borderRadius: BorderRadius.circular(12),
+                                    // 2. ! 대신 ?? 를 사용하여 null일 때 안전하게 기본 색상을 지정
+                                    border: Border.all(
+                                      color: (member['class'] ?? '취미반') == '선수반' 
+                                          ? (Colors.orange[200] ?? Colors.orange) 
+                                          : (Colors.blue[200] ?? Colors.blue)
+                                    ),
+                                  ),
+                                  child: Text(
+                                    // 3. Text 위젯에 null이 들어가지 않도록 기본값 처리
+                                    member['class'] ?? '취미반',
+                                    style: TextStyle(
+                                      fontSize: 12, 
+                                      color: (member['class'] ?? '취미반') == '선수반' ? Colors.orange[900] : Colors.blue[900]
+                                    ),
                                   ),
                                 ),
-                                child: Text(
-                                  // 3. Text 위젯에 null이 들어가지 않도록 기본값 처리
-                                  member['class'] ?? '취미반',
-                                  style: TextStyle(
-                                    fontSize: 12, 
-                                    color: (member['class'] ?? '취미반') == '선수반' ? Colors.orange[900] : Colors.blue[900]
-                                  ),
+                              ),
+                              DataCell(Text(member['birth'])),
+                              DataCell(
+                                Icon(
+                                  // DB의 1을 true로 인식하게 만듦
+                                  (member['is_active'] == 1 || member['is_active'] == true) 
+                                      ? Icons.check_circle 
+                                      : Icons.remove_circle,
+                                  color: (member['is_active'] == 1 || member['is_active'] == true) 
+                                      ? Colors.green 
+                                      : Colors.grey,
                                 ),
                               ),
-                            ),
-                            DataCell(Text(member['birth'])),
-                            DataCell(
-                              Icon(
-                                // DB의 1을 true로 인식하게 만듦
-                                (member['is_active'] == 1 || member['is_active'] == true) 
-                                    ? Icons.check_circle 
-                                    : Icons.remove_circle,
-                                color: (member['is_active'] == 1 || member['is_active'] == true) 
-                                    ? Colors.green 
-                                    : Colors.grey,
-                              ),
-                            ),
-                          ],
-                        );
-                      }).toList(),
+                            ],
+                          );
+                        }).toList(),
+                      ),
                     ),
                   ),
                 ),
               ),
-            ),
           ),
         ],
       ),
@@ -354,6 +353,9 @@ class _MngMemberScreenState extends State<MngMemberScreen> {
 
   // 회원 상세 보기 (수정/삭제)
   void _showMemberDetail(Map<String, dynamic> member) {
+    // 결제 내역을 저장할 변수와 로딩 상태
+    List<dynamic>? cachedPayments;
+
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -367,6 +369,13 @@ class _MngMemberScreenState extends State<MngMemberScreen> {
 
         return StatefulBuilder( // 클래스 선택이나 스위치 작동을 위해 StatefulBuilder 사용
           builder: (context, setModalState) {
+            // 데이터가 없을 때만 딱 한 번 호출
+            if (cachedPayments == null) {
+              _fetchMemberPayments(member['id']).then((data) {
+                setModalState(() => cachedPayments = data);
+              });
+            }
+
             return Container(
               padding: const EdgeInsets.fromLTRB(25, 20, 25, 30), // 여백 최적화
               height: MediaQuery.of(context).size.height * 0.85,
@@ -419,17 +428,19 @@ class _MngMemberScreenState extends State<MngMemberScreen> {
                           ),
                           
                           const SizedBox(height: 20),
-                          Container(
-                            padding: const EdgeInsets.all(15),
-                            decoration: BoxDecoration(color: Colors.blue.withValues(alpha: 0.05), borderRadius: BorderRadius.circular(10)),
-                            child: const Row(
-                              children: [
-                                Icon(Icons.credit_card, size: 20, color: Colors.blue),
-                                SizedBox(width: 10),
-                                Text('💳 결제 정보: 준비 중인 기능입니다.', style: TextStyle(color: Colors.blueGrey, fontSize: 13)),
-                              ],
-                            ),
+
+                          const Divider(height: 40),                          
+
+                          const Row(
+                            children: [
+                              Icon(Icons.payments_outlined, color: Color(0xFF166534)),
+                              SizedBox(width: 8),
+                              Text('결제 내역', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                            ],
                           ),
+                          const SizedBox(height: 10),
+
+                          _buildStaticPaymentList(cachedPayments),
                         ],
                       ),
                     ),
@@ -488,6 +499,42 @@ class _MngMemberScreenState extends State<MngMemberScreen> {
         prefixIcon: Icon(icon),
         contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       ),
+    );
+  }
+
+  // 결제 내역 리스트만 담당하는 위젯 함수
+  Widget _buildStaticPaymentList(List<dynamic>? payments) {
+    // 아직 데이터를 가져오는 중일 때
+    if (payments == null) {
+      return const Center(
+        child: Padding(padding: EdgeInsets.all(20), child: CircularProgressIndicator()),
+      );
+    }
+
+    // 데이터는 가져왔는데 비어있을 때
+    if (payments.isEmpty) {
+      return const Center(
+        child: Padding(padding: EdgeInsets.all(20), child: Text("결제 내역이 없습니다.")),
+      );
+    }
+
+    // 데이터가 있을 때 (에러 해결용 shrinkWrap 적용)
+    return ListView.separated(
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      itemCount: payments.length,
+      separatorBuilder: (_, __) => const Divider(height: 1),
+      itemBuilder: (context, index) {
+        final p = payments[index];
+        final bool isPaid = p['is_paid'] == 1 || p['is_paid'] == true;
+        return ListTile(
+          contentPadding: EdgeInsets.zero,
+          leading: Icon(isPaid ? Icons.check_circle : Icons.error_outline, 
+                      color: isPaid ? Colors.green : Colors.red),
+          title: Text(p['pay_item'] ?? ""),
+          trailing: Text(_formatter.format(p['amount'] ?? 0)),
+        );
+      },
     );
   }
   // 신규 회원 등록
@@ -615,6 +662,33 @@ class _MngMemberScreenState extends State<MngMemberScreen> {
               ),
             );
           },
+        );
+      },
+    );
+  }
+
+  // 삭제 확인 다이얼로그.
+  void _showDeleteConfirmDialog(BuildContext context, dynamic memberId) {
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: const Text("회원 삭제"),
+          content: const Text("정말 이 회원을 삭제하시겠습니까?\n삭제된 데이터는 복구할 수 없습니다."),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context), // 취소
+              child: const Text("취소", style: TextStyle(color: Colors.grey)),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+              onPressed: () async {
+                Navigator.pop(context); // 다이얼로그 닫기
+                await _confirmDelete(memberId); // 🏹 실제 삭제 API 호출
+              },
+              child: const Text("삭제", style: TextStyle(color: Colors.white)),
+            ),
+          ],
         );
       },
     );

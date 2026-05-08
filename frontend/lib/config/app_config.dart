@@ -12,4 +12,5 @@ class AppConfig {
   
   // 3. 공통 토픽 이름 (나중에 웹 지원되면 쓸 용도)
   static const String topicName = "club_all";
+  static const String adminTopicName = "admin_notifications";
 }

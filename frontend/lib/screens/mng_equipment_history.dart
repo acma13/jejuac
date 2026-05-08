@@ -132,20 +132,20 @@ class _MngEquipmentHistoryScreenState extends State<MngEquipmentHistoryScreen> {
   }
 
   Future<void> _fetchMemberOutStock(int memberId) async {
-  try {
-    final response = await http.get(
-      Uri.parse("${Config.getOutMemberStock}/${widget.equipment.id}/$memberId"),
-    );
-    if (response.statusCode == 200) {
-      final data = json.decode(response.body);
-      setState(() {
-        _memberOutStock = data['out_stock'] ?? 0;
-      });
+    try {
+      final response = await http.get(
+        Uri.parse("${Config.getOutMemberStock}/${widget.equipment.id}/$memberId"),
+      );
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        setState(() {
+          _memberOutStock = data['out_stock'] ?? 0;
+        });
+      }
+    } catch (e) {
+      debugPrint("회원 점유 수량 로드 실패: $e");
     }
-  } catch (e) {
-    debugPrint("회원 점유 수량 로드 실패: $e");
   }
-}
 
   void _openTransactionEditor({bool isDetail = false, dynamic item}) {
 

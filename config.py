@@ -9,6 +9,7 @@ load_dotenv()
 
 # --- [공통 상수] ---
 FCM_TOPIC_NAME = "club_all"
+FCM_ADMIN_TOPIC = "admin_notifications"  # 관리자 Q&A 알림용 (추가)
 DATABASE_NAME = "archery_club.db"
 
 # --- [공통 경로 설정] ---

@@ -19,6 +19,8 @@ import 'screens/notice_screen.dart';
 import 'screens/todo_list_screen.dart';
 import 'screens/mng_equipment_screen.dart';
 import 'screens/data_migration_screen.dart';
+import 'screens/mng_payment_screen.dart';
+import 'screens/qna_screen.dart';
 import 'constants.dart';
 import 'firebase_options.dart';
 import 'config/app_config.dart';
@@ -53,7 +55,7 @@ Future<void> _setupMessaging() async {
 
   // 2. 결정되지 않았을 때만 권한 요청 팝업을 띄움
   if (currentSettings.authorizationStatus == AuthorizationStatus.notDetermined) {
-    print("🔔 권한 결정 전: 팝업을 띄웁니다.");
+    // print("🔔 권한 결정 전: 팝업을 띄웁니다.");
     currentSettings = await messaging.requestPermission(
       alert: true,
       badge: true,
@@ -63,9 +65,9 @@ Future<void> _setupMessaging() async {
 
   // 3. 허용된 상태라면 토큰 작업 진행
   if (currentSettings.authorizationStatus == AuthorizationStatus.authorized) {
-    print("✅ 알림 권한이 허용된 상태입니다.");
+    // print("✅ 알림 권한이 허용된 상태입니다.");
     String? token = await messaging.getToken(vapidKey: AppConfig.vapidKey);
-    print("토큰 값 : $token");
+    // print("토큰 값 : $token");
     
     if (token != null) {
       await registerTokenWithServer(token);
@@ -76,16 +78,20 @@ Future<void> _setupMessaging() async {
 
     // [포그라운드 리스너] - 앱 켜져 있을 때도 알림을 띄워주는 감시자
     FirebaseMessaging.onMessage.listen((RemoteMessage message) {
-      print("🔔 포그라운드 메시지 수신: ${message.notification?.title}");
+      print("🔔 포그라운드 메시지 수신: ${message.data}");
 
-      if (message.notification != null) {
+      if (message.data.isNotEmpty) {
         // 앱이 켜져 있어도 시스템 알림을 강제로 호출 (중복 방지 로직은 브라우저가 처리)
+        String title = message.data['title'] ?? '제주양궁클럽';
+        String body = message.data['body'] ?? '';
+        String type = message.data['type'] ?? 'jejuac-notification';
+
         web.Notification(
-          message.notification!.title ?? '제주양궁클럽',
+          title,
           web.NotificationOptions(
-            body: message.notification!.body ?? '',
+            body: body,
             icon: '/icons/bow-and-arrow.png',
-            tag: 'jejuac-notification',
+            tag: type,
           ),
         );
       }
@@ -114,6 +120,26 @@ Future<void> registerTokenWithServer(String token) async {
     }
   } catch (e) {
     print("❌ 서버 통신 에러: $e");
+  }
+}
+
+void syncToken(String userId, String role) async {
+  try {
+    String? token = await FirebaseMessaging.instance.getToken(vapidKey: AppConfig.vapidKey);
+
+    print("토큰 값 : $token");
+    if (token != null) {
+      // 기존 로직(전체구독)은 이미 main에서 실행됐으니, 
+      // 여기서는 '이름표'만 붙여서 서버에 보냅니다.
+      await http.post(
+        Uri.parse(Config.updateToken),
+        headers: {"Content-Type": "application/json"},
+        body: jsonEncode({"user_id": userId, "fcm_token": token, "user_role": role}),
+      );
+      print("🎯 개인 토큰 및 권한 동기화 완료: $userId ($role)");
+    }
+  } catch (e) {
+    print("동기화 실패: $e");
   }
 }
 
@@ -175,6 +201,9 @@ class _MyHomePageState extends State<MyHomePage> {
       _userRole = role;
       _userId = id;
     });
+
+    // 로그인 성공 직후, 현재 기기의 토큰을 사용자 정보(ID, Role)와 함께 서버에 동기화합니다.
+    syncToken(id, role);
 
     //print("화면 전환 상태: $isLoggedIn");
   }
@@ -576,6 +605,7 @@ class MainDashboard extends StatelessWidget {
       {'title': '결제 관리', 'icon': Icons.payments, 'colors': [Colors.teal, Colors.tealAccent]},
       {'title': '장비 관리', 'icon': Icons.handyman, 'colors': [Colors.brown, Colors.orangeAccent]},
       {'title': '개인정보', 'icon': Icons.manage_accounts, 'colors': [Colors.blueGrey, Colors.grey]},
+      {'title': 'Q&A', 'icon': Icons.question_answer, 'colors': [Color(0xFF10B981), Color(0xFF34D399)]},
     ];
 
     if (userRole == 'Admin') {
@@ -670,7 +700,15 @@ class MainDashboard extends StatelessWidget {
                                 builder: (context) => TodoPage(userName: userName),
                               ),
                             ); 
-                          } 
+                          }
+                          else if (title == '결제 관리') {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) => MngPaymentScreen(userId: userId),
+                              ),
+                            ); 
+                          }  
                           else if (title == '장비 관리') {
                             Navigator.push(
                               context,
@@ -684,6 +722,14 @@ class MainDashboard extends StatelessWidget {
                               context,
                               MaterialPageRoute(
                                 builder: (context) => DataMigrationScreen(userId: userId),
+                              ),
+                            ); 
+                          } 
+                          else if (title == 'Q&A') {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) => QnaScreen(userId: userId, userName: userName, userRole: userRole),
                               ),
                             ); 
                           } else {
