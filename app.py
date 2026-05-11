@@ -14,6 +14,7 @@ import firebase_admin
 import io
 import pandas as pd
 import asyncio
+import random
 from firebase_admin import credentials, messaging
 from config import initialize_firebase, FCM_TOPIC_NAME, FRONTEND_PATH, FCM_ADMIN_TOPIC
 
@@ -96,6 +97,7 @@ initialize_firebase()
 
 # 2. 웹 푸시 발송 함수
 async def send_fcm_notification(p_data):
+    print(f"🚀 알림 함수 진입: {p_data}")
     try:
         # 1. 공통 데이터 추출 (add_notice나 add_qna에서 보낸 값들)
         title = p_data.get("title")
@@ -346,6 +348,7 @@ async def get_schedules():
 # 클럽 일정 및 수정에 대한 전용 규격(모델)
 class scheduleRequest(BaseModel):
     id: Optional[str] = None
+    userid: Optional[str] = None
     title: str
     location: str
     manager: str
@@ -613,7 +616,22 @@ async def add_todo(req: TodoAddRequest):
 
         # TODO: 등록 시 알람 쏘는거 만들어야 함.
         #       공지 쏘던거랑 같이 쓰면 될 것 같은데 이 부분은 수정이 필요해보임.
+
         if result:
+            try:
+                push_data = {
+                    "target": FCM_TOPIC_NAME,  # config에 정의된 전체 공지 토픽
+                    "title": f"[TODO] {req.title}",
+                    "body": "새로운 할 일이 등록되었습니다",
+                    "type": "new_todo_alert"
+                }
+                
+                # 비동기로 알림 발송 (서버 응답 속도에 영향을 주지 않음)
+                asyncio.create_task(send_fcm_notification(push_data))
+                
+            except Exception as push_error:
+                print(f"Todo 알림 발송 실패: {push_error}")
+
             return {"status": "success"}
         else:
             return {"status": "error", "message": "DB 저장 실패"}
@@ -790,6 +808,14 @@ async def api_add_trade(req: AddTradeInfoRequest):
         # 실패 시 400 에러나 500 에러를 줄 수도 있지만, 
         # 우선 success: False로 처리해서 플러터에서 메시지를 띄우게 합니다.
         return {"success": False, "message": msg}
+    
+# 8. 특정회원의 최신 출고내역 조회
+@app.get("/api/get_cancel_limit_info/{equipment_id}/{trade_type}")
+async def api_get_cancel_limit_info(equipment_id: int, trade_type: str, member_id: Optional[int] = None):
+    info = db.get_cancel_limit_info(equipment_id, trade_type, member_id)
+    if info:
+        return {"success": True, "unit_price": info['unit_price'], "quantity": info['quantity']}
+    return {"success": False, "message": "해당 내역이 없습니다."}
 
 # ---------------- 결제 관련 API ------------------------------
 
@@ -797,6 +823,7 @@ class AddPaymentRequest(BaseModel):
     member_id: int
     name: str
     pay_item: str
+    pay_method: str
     target_month: Optional[str] = ""
     amount: int
     is_paid: bool
@@ -806,6 +833,8 @@ class AddPaymentRequest(BaseModel):
 class UpdatePaymentRequest(BaseModel):
     id: int
     pay_item: str
+    target_month: Optional[str] = ""
+    pay_method: str
     amount: int
     is_paid: bool
     note: str
@@ -851,54 +880,50 @@ class MigrationRequest(BaseModel):
     admin_id: str
     data_type: str
 
+def get_sheet_data(sheet_url: str, required_cols: list):
+    try:
+        # 1. URL 변환 로직 (공통)
+        csv_url = sheet_url.replace('/edit?usp=sharing', '/export?format=csv')
+        if '/edit#gid=' in csv_url:
+            csv_url = csv_url.replace('/edit#gid=', '/export?format=csv&gid=')
+        elif '/edit' in csv_url and '/export' not in csv_url:
+            csv_url = csv_url.replace('/edit', '/export?format=csv')
+
+        # 2. 데이터 읽기
+        df = pd.read_csv(csv_url)
+        
+        # 3. 필수 컬럼 검사 (공통)
+        current_cols = df.columns.tolist()
+        missing_cols = [col for col in required_cols if col not in current_cols]
+        
+        if missing_cols:
+            raise Exception(f"빠진 항목: {', '.join(missing_cols)}")
+            
+        return df
+    except Exception as e:
+        raise Exception(f"시트 읽기 실패: {str(e)}")
+
 @app.post("/api/upload_members_list")
 async def upload_members_list(req: MigrationRequest):
     sheet_url = req.url
     admin_id = req.admin_id
 
-    if not sheet_url:
-        raise HTTPException(status_code=400, detail="URL이 없습니다.")
+    # 회원 등록에 꼭 필요한 시트 항목들
+    required = ['name', 'phone', 'class', 'birth', 'is_active']
 
     try:
-        # 1. 구글 시트 URL을 CSV 다운로드 링크로 변환
-        csv_url = sheet_url.replace('/edit?usp=sharing', '/export?format=csv')
-        if '/edit#gid=' in csv_url:
-            csv_url = csv_url.replace('/edit#gid=', '/export?format=csv&gid=')
-        elif '/edit' in csv_url and '/export' not in csv_url:
-             csv_url = csv_url.replace('/edit', '/export?format=csv')
+        # 1. 공통 함수로 데이터 가져오기 및 항목 검사
+        df = get_sheet_data(sheet_url, required)
 
-        # 2. Pandas로 데이터 읽기
-        # 주의: FastAPI 환경이므로 별도의 requests 없이 pandas가 직접 URL을 읽을 수 있습니다.
-        df = pd.read_csv(csv_url)
-
-        required_columns = {
-            '회원': ['name', 'phone', 'class', 'birth', 'is_active'],
-            '결제': ['member_id', 'amount', 'payment_date'], # TODO: 추후에 변경 할 것
-            '장비': ['equipment_name', 'serial_number']     # TODO: 추후에 변경 할 것
-        }
-        current_cols = df.columns.tolist()
-        missing_cols = [col for col in required_columns[req.data_type] if col not in current_cols]
-
-        if missing_cols:
-            raise HTTPException(
-                status_code=400, 
-                detail=f"잘못된 시트 양식입니다. 빠진 항목: {', '.join(missing_cols)}"
-            )
-        
-        # 3. 데이터 가공 (선배님의 1900-01-01 전략 적용)
-        # 시트 컬럼명: name, phone, class, birth, is_active
+        # 2. 회원 전용 데이터 가공 (1900-01-01 전략 등)
         df['birth'] = df['birth'].fillna('1900-01-01').astype(str)
         df['is_active'] = df['is_active'].fillna(1).astype(int)
+        df['class'] = df['class'].fillna('취미반')
         
-        # 'member_class'로 DB 컬럼명이 되어있다면 시트의 'class'를 매칭해줍니다.
-        # 시트 열 이름이 'class'라면 아래처럼 처리
-        df['class'] = df['class'].fillna('일반')
-        
-        # NaN 값들을 dict 리스트로 변환
+        # dict 리스트로 변환
         member_list = df.to_dict('records')
 
-        # 4. database.py의 함수 호출 (db 객체 사용)
-        # database.py에 작성하신 함수명이 upload_members_from_list 인지 확인하세요!
+        # 3. DB 저장 함수 호출
         success, count = db.upload_members_from_list(member_list, admin_id)
 
         if success:
@@ -907,9 +932,157 @@ async def upload_members_list(req: MigrationRequest):
             raise HTTPException(status_code=500, detail="DB 등록 중 오류가 발생했습니다.")
 
     except Exception as e:
-        print(f"❌ 마이그레이션 에러: {e}")
-        raise HTTPException(status_code=500, detail=f"시트 읽기 실패: {str(e)}")
+        print(f"❌ 회원 마이그레이션 에러: {e}")
+        # 공통 함수나 가공 단계에서 발생한 에러 메시지를 프론트엔드로 전달
+        raise HTTPException(status_code=400, detail=str(e))
     
+@app.post("/api/upload_schedule_list")
+async def upload_schedule_list(req: MigrationRequest):
+    # 1. 일정에 필요한 필수 컬럼 정의
+    required = ['제목', '장소', '담당자', '시작일', '종료일', '내용', '알람여부']
+    
+    try:
+        # 2. 공통 함수 호출
+        df = get_sheet_data(req.url, required)
+        
+        # 3. 일정 전용 가공 (랜덤 컬러, admin 고정 등)
+        color_options = [
+            0xFFE53935, # 빨강
+            0xFFFB8C00, # 주황
+            0xFFFFEB3B, # 노랑
+            0xFF43A047, # 초록
+            0xFF1E88E5, # 파랑
+            0xFF8E24AA, # 보라
+            0xFF784E4E  # 찍은 색 (ARGB: 255, 120, 78, 78)
+        ]
+        
+        success_count = 0
+        for _, row in df.iterrows():
+
+            selected_color = random.choice(color_options)
+
+            schedule_data = {
+                "userid": "admin",
+                "title": row['제목'],
+                "location": row['장소'],
+                "manager": row['담당자'],
+                "start_date": row['시작일'],
+                "end_date": row['종료일'],
+                "content": row['내용'],
+                "color": selected_color,
+                "use_alarm": int(row.get('알람여부', 0))
+            }
+            db.upload_schedule_data_list(schedule_data)
+            success_count += 1
+            
+        return {"status": "success", "success": success_count}
+        
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    
+@app.post("/api/upload_todo_list")
+async def upload_todo_list(req: MigrationRequest):
+    # 1. 일정에 필요한 필수 컬럼 정의
+    required = ['제목', '기한', '담당자', '내용', '파일url', '완료여부']
+    
+    try:
+        # 2. 공통 함수 호출
+        df = get_sheet_data(req.url, required)
+
+        df['기한'] = df['기한'].fillna('').astype(str)
+              
+        success_count = 0
+        for _, row in df.iterrows():
+            todo_data = {                
+                "title": row['제목'],
+                "due_date": row['기한'],
+                "assignee": row['담당자'],                
+                "content": row['내용'],
+                "attachment_url": row['파일url'],
+                "is_completed": int(row.get('완료여부', 0))
+            }
+            db.upload_todo_list(todo_data)
+            success_count += 1
+            
+        return {"status": "success", "success": success_count}
+        
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    
+# 초대된 이메일 리스트 업로드
+@app.post("/api/upload_invited_email")
+async def upload_invited_email(req: MigrationRequest):
+    # 1. 일정에 필요한 필수 컬럼 정의
+    required = ['email', '사용여부']
+    
+    try:
+        # 2. 공통 함수 호출
+        df = get_sheet_data(req.url, required)
+              
+        success_count = 0
+        for _, row in df.iterrows():
+            email_data = {                
+                "email": row['email'],                
+                "is_used": int(row.get('사용여부', 0))
+            }
+            db.upload_invited_email(email_data)
+            success_count += 1
+            
+        return {"status": "success", "success": success_count}
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+# 결제 정보 일괄 업로드
+@app.post("/api/upload_payments_list")
+async def upload_payments_list(req: MigrationRequest):
+    # 1. 필수 컬럼 정의
+    required = ['이름', '생년월일', '대상월', '금액', '구분', '결제방법', '결제여부']
+    
+    try:
+        df = get_sheet_data(req.url, required)
+        
+        success_count = 0
+        fail_count = 0
+        fail_list = []
+
+        def clean_val(val):
+            # Pandas의 NaN이거나 None이면 None(DB의 NULL) 반환
+            if pd.isna(val) or val is None:
+                return None
+            # 값이 있으면 문자열로 바꾸고 공백 제거
+            return str(val).strip()
+
+        for _, row in df.iterrows():
+            # 날짜 및 숫자 데이터 안전하게 가공
+            payment_data = {
+                "name": str(row['이름']).strip(),
+                "birth_date": str(row['생년월일']).strip(), # 회원 매칭용
+                "target_month": clean_val(row['대상월']),
+                "amount": int(row['금액']) if row['금액'] else 0,
+                "pay_item": clean_val(row['구분']),
+                "pay_method": clean_val(row['결제방법']),     # TODO: 숫자로 저장 할 것인지 글자 그대로 저장할 것인지에 따라 바꿀 것
+                "is_paid": 1 if str(row['결제여부']) in ['1', '완납', 'TRUE', 'true'] else 0,
+                "created_by": "admin"
+            }
+            
+            # DB 저장 및 결과 확인 (매칭 실패 시 False 반환하도록 설계)
+            is_success = db.upload_payments_data(payment_data)
+            
+            if is_success:
+                success_count += 1
+            else:
+                fail_count += 1
+                fail_list.append(f"{row['이름']}({row['생년월일']})")
+            
+        return {
+            "status": "success", 
+            "success": success_count, 
+            "fail": fail_count,
+            "fail_list": fail_list # 매칭 안 된 사람 확인용
+        }
+        
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
 # ---------------- Q&A 관련 API ----------------    
 

@@ -39,6 +39,16 @@ class _ClubCalendarScreenState extends State<ClubCalendarScreen> {
   List<ArcherAppointment> _selectedAppointments = [];
   List<ArcherAppointment> _allAppointments = [];
 
+  List<Color> colorOptions = [
+      const Color(0xFFE53935), // 빨강
+      const Color(0xFFFB8C00), // 주황
+      const Color(0xFFFFEB3B), // 노랑
+      const Color(0xFF43A047), // 초록
+      const Color(0xFF1E88E5), // 파랑
+      const Color(0xFF8E24AA), // 보라
+      const Color.fromARGB(255, 120, 78, 78), // 찍은 색.
+    ];
+
   @override
   void initState() {
     super.initState();
@@ -169,15 +179,15 @@ class _ClubCalendarScreenState extends State<ClubCalendarScreen> {
     Color selectedColor = Colors.blue;
     bool useAlarm = false;
 
-    List<Color> colorOptions = [
-      const Color(0xFFE53935), // 빨강
-      const Color(0xFFFB8C00), // 주황
-      const Color(0xFFFFEB3B), // 노랑
-      const Color(0xFF43A047), // 초록
-      const Color(0xFF1E88E5), // 파랑
-      const Color(0xFF8E24AA), // 보라
-      const Color.fromARGB(255, 120, 78, 78), // 찍은 색.
-    ];
+    // List<Color> colorOptions = [
+    //   const Color(0xFFE53935), // 빨강
+    //   const Color(0xFFFB8C00), // 주황
+    //   const Color(0xFFFFEB3B), // 노랑
+    //   const Color(0xFF43A047), // 초록
+    //   const Color(0xFF1E88E5), // 파랑
+    //   const Color(0xFF8E24AA), // 보라
+    //   const Color.fromARGB(255, 120, 78, 78), // 찍은 색.
+    // ];
     
     showModalBottomSheet(
       context: context,
@@ -319,13 +329,14 @@ class _ClubCalendarScreenState extends State<ClubCalendarScreen> {
                             );
 
                             print("상태코드: ${response.statusCode}");
-                            print("서버 응답 내용: ${response.body}");
+                            print("userId : $userId");
 
+                            
                             if (response.statusCode == 200) {
                               print("서버 저장 완료!");
                               Navigator.pop(context); // 입력창 닫기
-                              _fetchSchedules(); // 달력리스트 새로 고침
-                            }
+                              _fetchSchedules(); // 달력리스트 새로 고침                                                           
+                            }                            
                           } catch (e) {
                             print("통신 에러: $e");
                           }
@@ -357,11 +368,11 @@ class _ClubCalendarScreenState extends State<ClubCalendarScreen> {
     Color selectedColor = app.color;
     bool useAlarm = true; // DB 설계에 따라 app.useAlarm 등으로 변경 가능
 
-    final List<Color> colorOptions = [
-      const Color(0xFFE53935), const Color(0xFFFB8C00), const Color(0xFFFFEB3B),
-      const Color(0xFF43A047), const Color(0xFF1E88E5), const Color(0xFF8E24AA),
-      const Color(0xFF784E4E),
-    ];
+    // final List<Color> colorOptions = [
+    //   const Color(0xFFE53935), const Color(0xFFFB8C00), const Color(0xFFFFEB3B),
+    //   const Color(0xFF43A047), const Color(0xFF1E88E5), const Color(0xFF8E24AA),
+    //   const Color(0xFF784E4E),
+    // ];
 
     showModalBottomSheet(
       context: context,

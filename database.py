@@ -142,10 +142,10 @@ def init_db():
                 total_price INTEGER NOT NULL DEFAULT 0, -- 합계 금액
                 note TEXT,                          -- 비고
                 processed_by TEXT NOT NULL,     -- 처리자 (예: 권영)
-                processed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, -- 처리 일시
+                processed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, -- 처리 일시                
                 -- 외래키(Foreign Key) 설정: 장비나 회원이 지워질 때의 규칙
                 FOREIGN KEY (equipment_id) REFERENCES equipments (id) ON DELETE CASCADE,
-                FOREIGN KEY (member_id) REFERENCES members (id)
+                FOREIGN KEY (member_id) REFERENCES members (id)                
             )
         """)
 
@@ -156,6 +156,7 @@ def init_db():
                 member_id INTEGER NOT NULL,          -- members 테이블의 id 참조
                 name TEXT NOT NULL,                  -- 검색 편의를 위한 중복 저장 (선택 사항)
                 pay_item TEXT NOT NULL,              -- 결제 항목 (수강료, 장비대여 등)
+                pay_method TEXT,                     -- 납부수단
                 target_month TEXT,                   -- 대상 연월 (예: '2026-04')
                 amount INTEGER NOT NULL DEFAULT 0,   -- 금액
                 is_paid INTEGER DEFAULT 0,           -- 납부 여부 (0: 미납, 1: 완납)
@@ -380,6 +381,7 @@ def add_todo(p):
                         VALUES (?, ?, ?, ?, ?, ?)""", 
                     (p.title, p.due_date, p.assignee, p.content, p.attachment_url, p.created_by))
             conn.commit()
+            return True
         except Exception as e:
             # 에러 발생 시 되돌리기
             conn.rollback()
@@ -396,7 +398,7 @@ def update_todo_content(p):
                 SET title=?, due_date=?, assignee=?, content=?, attachment_url=?
                 WHERE id=?
             """
-            c.execute(query, (p.title, p.due_date, p.assignee, p.content, p.attachment_url, p.todo_id))
+            c.execute(query, (p.title, p.due_date, p.assignee, p.content, p.attachment_url, p.id))
             conn.commit()
             return True
         except Exception as e:
@@ -412,7 +414,7 @@ def update_todo_status(p):
             c = conn.cursor()
             # is_completed는 bool로 받아서 1 또는 0으로 저장
             query = "UPDATE todos SET is_completed=? WHERE id=?"
-            c.execute(query, (1 if p.is_completed else 0, p.todo_id))
+            c.execute(query, (1 if p.is_completed else 0, p.id))
             conn.commit()
             return True
         except Exception as e:
@@ -425,7 +427,7 @@ def delete_todo(p):
     with get_connection() as conn:
         try:
             c = conn.cursor()
-            c.execute("DELETE FROM todos WHERE id=?", (p.todo_id,))
+            c.execute("DELETE FROM todos WHERE id=?", (p.id,))
 
             # print(f"✅ 삭제할 id 값: {todo_id}")
 
@@ -570,7 +572,7 @@ def get_all_members():
     with get_connection() as conn:
         try:
             c = conn.cursor()            
-            c.execute("SELECT id, name, phone, birth, class, is_active FROM members")
+            c.execute("SELECT id, name, phone, birth, class, is_active FROM members ORDER BY name ASC")
             rows = c.fetchall()
             # sqlite3.Row 객체들을 딕셔너리 리스트로 변환해서 반환합니다.
             return [dict(row) for row in rows]
@@ -796,7 +798,7 @@ def update_equipment_db(p):
                 SET name=?, spec=?, location=?, note=?
                 WHERE id=?
             """
-            c.execute(query, (p.name, p.spec, p.location, p.note, p.equipment_id))
+            c.execute(query, (p.name, p.spec, p.location, p.note, p.id))
             conn.commit()
             return True            
         except Exception as e:
@@ -874,6 +876,32 @@ def add_trade_record(p):
             print(f"❌ 입출고 등록 실패: {e}")
             return False, str(e)
 
+def get_cancel_limit_info(equipment_id: int, trade_type: str, member_id: int = None):
+    with get_connection() as conn:
+        try:
+            c = conn.cursor()
+            if trade_type == "입고취소":
+                # 입고취소는 창고에 남은 '실재고'를 넘을 수 없음
+                c.execute("SELECT stock FROM equipments WHERE id = ?", (equipment_id,))
+                row = c.fetchone()
+                return {"quantity": row['stock'] if row else 0, "unit_price": 0}
+            
+            elif trade_type == "출고취소":
+                # 출고취소는 '회원별 현재 보유량'을 넘을 수 없음
+                query = """
+                    SELECT SUM(CASE WHEN trade_type = '출고' THEN quantity 
+                                   WHEN trade_type = '출고취소' THEN -quantity ELSE 0 END) as member_stock
+                    FROM equipment_history 
+                    WHERE equipment_id = ? AND member_id = ?
+                """
+                c.execute(query, (equipment_id, member_id))
+                row = c.fetchone()
+                return {"quantity": row['member_stock'] if row['member_stock'] else 0, "unit_price": 0}
+            return None
+        except Exception as e:
+            print(f"❌ 조회 에러: {e}")
+            return None
+
 
 # [기타] 활동 회원 목록 조회
 def get_active_members_db():    
@@ -898,9 +926,9 @@ def add_payment(p):
             c = conn.cursor()
             c.execute("""
                 INSERT INTO payments (
-                    member_id, name, pay_item, target_month, amount, is_paid, note, created_by
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-            """, (p.member_id, p.name, p.pay_item, p.target_month, 
+                    member_id, name, pay_item, target_month, pay_method, amount, is_paid, note, created_by
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, (p.member_id, p.name, p.pay_item, p.target_month, p.pay_method, 
                   p.amount, 1 if p.is_paid else 0, p.note, p.created_by))
             conn.commit()
             return True
@@ -913,7 +941,7 @@ def get_all_payments():
     with get_connection() as conn:
         c = conn.cursor()
         c.execute("""
-            SELECT id, member_id, name, pay_item, target_month, amount, is_paid, note, created_at 
+            SELECT id, member_id, name, pay_item, target_month, pay_method, amount, is_paid, note, created_at 
             FROM payments 
             ORDER BY target_month DESC, created_at DESC
         """)
@@ -926,9 +954,9 @@ def update_payment(p):
             c = conn.cursor();
             c.execute("""
                 UPDATE payments 
-                SET pay_item = ?, amount = ?, is_paid = ?, note = ? 
+                SET pay_item = ?, target_month = ?, pay_method = ?, amount = ?, is_paid = ?, note = ? 
                 WHERE id = ?
-            """, (p.pay_item, p.amount, 1 if p.is_paid else 0, p.note, p.id))
+            """, (p.pay_item, p.target_month, p.pay_method, p.amount, 1 if p.is_paid else 0, p.note, p.id))
             conn.commit()
             return True
         except Exception as e:
@@ -974,7 +1002,159 @@ def upload_members_from_list(member_list, admin_id):
             print(f"Migration Error: {e}")
             return False, 0       
 
-# TODO: 결제 정보 일괄 업로드
+# 일정 업로드
+def upload_schedule_data_list(data):
+    """
+    일정 일괄 업로드를 위한 DB 저장 함수
+    data: {userid, title, location, manager, start_date, end_date, content, color, use_alarm}
+    """
+    # 1. 연결 및 커서 생성
+    with get_connection() as conn:
+        try:
+            c = conn.cursor()
+            
+            # 2. INSERT 쿼리 (id는 자동증가이므로 제외)
+            query = """
+                INSERT INTO schedules (
+                    userid, title, location, manager, 
+                    start_date, end_date, content, color, use_alarm
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """
+            
+            # 3. 데이터 실행
+            c.execute(query, (
+                data['userid'],      # admin 고정값
+                data['title'],
+                data['location'],
+                data['manager'],
+                data['start_date'],
+                data['end_date'],
+                data['content'],
+                data['color'],       # 서버에서 선택한 랜덤 컬러
+                data['use_alarm']    # 알람 여부 (1 또는 0)
+            ))
+            
+            # 4. 저장 완료
+            conn.commit()
+            return True
+            
+        except Exception as e:
+            conn.rollback()
+            print(f"❌ 일정 마이그레이션 DB 에러: {e}")
+            return False
+        
+# 할일 목록 업로드
+def upload_todo_list(data):
+    """
+    할 일(TODO) 일괄 업로드를 위한 DB 저장 함수
+    """
+    with get_connection() as conn:
+        try:
+            c = conn.cursor()
+            
+            # 테이블명이 'todos'라고 가정하고 쿼리를 짰습니다. 
+            # 혹시 테이블명이 다르면 아래 테이블명만 수정해 주세요!
+            query = """
+                INSERT INTO todos (
+                    title, due_date, assignee, content, attachment_url, is_completed
+                ) VALUES (?, ?, ?, ?, ?, ?)
+            """
+            
+            c.execute(query, (
+                data['title'],
+                data['due_date'],
+                data['assignee'],
+                data['content'],
+                data['attachment_url'],
+                data['is_completed']
+            ))
+            
+            conn.commit()
+            return True
+            
+        except Exception as e:
+            conn.rollback()
+            print(f"❌ 할 일 마이그레이션 DB 에러: {e}")
+            return False
+        
+# 초대된 이메일 업로드
+def upload_invited_email(data):
+    """
+    초대된 사용자 일괄 업로드를 위한 DB 저장 함수
+    """
+    with get_connection() as conn:
+        try:
+            c = conn.cursor()
+            
+            # 테이블명이 'todos'라고 가정하고 쿼리를 짰습니다. 
+            # 혹시 테이블명이 다르면 아래 테이블명만 수정해 주세요!
+            query = """
+                INSERT INTO invited_users (
+                    email, is_used
+                ) VALUES (?, ?)
+            """
+            
+            c.execute(query, (
+                data['email'],
+                data['is_used']
+            ))
+            
+            conn.commit()
+            return True
+            
+        except Exception as e:
+            conn.rollback()
+            print(f"❌ 초대된 사용자 마이그레이션 DB 에러: {e}")
+            return False
+        
+# 결제 정보 일괄 업로드
+def upload_payments_data(data):
+    """
+    이름과 생년월일로 member_id를 찾아 결제 내역을 저장합니다.
+    """
+    with get_connection() as conn:
+        try:
+            c = conn.cursor()
+            
+            # 1. 이름과 생년월일로 member_id 조회
+            c.execute(
+                "SELECT id FROM members WHERE name = ? AND birth = ?", 
+                (data['name'], data['birth_date'])
+            )
+            result = c.fetchone()
+            
+            if not result:
+                print(f"⚠️ 매칭되는 회원을 찾을 수 없음: {data['name']} {data['birth_date']}")
+                return False # 매칭 실패 시 저장하지 않음
+            
+            member_id = result['id']
+            
+            # 2. 결제 내역 INSERT
+            query = """
+                INSERT INTO payments (
+                    member_id, name, pay_item, pay_method, 
+                    target_month, amount, is_paid, created_by
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """
+            
+            c.execute(query, (
+                member_id,
+                data['name'],
+                data['pay_item'],
+                data['pay_method'],
+                data['target_month'],
+                data['amount'],
+                data['is_paid'],
+                data['created_by']
+            ))
+            
+            conn.commit()
+            return True
+            
+        except Exception as e:
+            conn.rollback()
+            print(f"❌ 결제 마이그레이션 DB 에러: {e}")
+            return False
 
 
 # --------------- Q&A CRUD ---------------

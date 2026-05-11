@@ -18,10 +18,32 @@ class _DataMigrationScreenState extends State<DataMigrationScreen> {
   bool _isLoading = false;
 
   // 마이그레이션 대상 리스트
-  final List<String> _dataTypes = ['회원', '결제', '장비'];
+  final List<String> _dataTypes = ['회원', '결제', 'TODO', '일정', '초대명단'];
 
   // 데이터 가져오기 실행 함수
   Future<void> _runMigration() async {
+
+    String targetUrl;
+      switch (_selectedDataType) {
+        case '회원':
+          targetUrl = Config.uploadMembersList;
+          break;
+        case '일정':
+          targetUrl = Config.uploadSecheduleList; 
+          break;
+        case 'TODO':
+          targetUrl = Config.uploadTodoList;
+          break;
+        case '결제':
+          targetUrl = Config.uploadPaymentsList;
+          break;
+        case '초대명단':
+          targetUrl = Config.uploadInvitedEmail;
+          break;
+        default:
+          targetUrl = Config.uploadMembersList;
+      }
+
     if (_urlController.text.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text("구글 시트 URL을 입력해주세요.")),
@@ -37,14 +59,14 @@ class _DataMigrationScreenState extends State<DataMigrationScreen> {
       String adminId = widget.userId;
 
       final response = await http.post(
-        Uri.parse(Config.uploadMembersList), // constants.dart에 선언한 주소
+        Uri.parse(targetUrl), // constants.dart에 선언한 주소
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({
           'url': url,
           'data_type': dataType, // '회원', '결제', '장비' 등
           'admin_id': adminId,   // 현재 관리자 ID
         }),
-      ).timeout(const Duration(seconds: 30));;      
+      ).timeout(const Duration(seconds: 30));     
 
       if (!mounted) return;
       

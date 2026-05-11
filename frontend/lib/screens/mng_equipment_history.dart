@@ -30,12 +30,18 @@ class _MngEquipmentHistoryScreenState extends State<MngEquipmentHistoryScreen> {
   int _totalAmount = 0;
   int? _currentStock;      // 현재 실시간 재고
   int _memberOutStock = 0; // 선택된 회원이 현재 가지고 있는 수량
+  bool isFormValid = false; // 버튼 활성화 여부 결정
+  int? _targetParentId;
   
   @override
   void initState() {
     super.initState();
-    _currentStock = widget.equipment.stock;
     _fetchHistory();
+    _fetchActiveMembers();
+
+    // 🎯 이 리스너들이 있어야 실시간으로 버튼이 켜집니다!
+    _qtyController.addListener(_updateTotalAmount);
+    _priceController.addListener(_updateTotalAmount);
   }
 
   // [API] 입출고 내역 가져오기
@@ -90,7 +96,8 @@ class _MngEquipmentHistoryScreenState extends State<MngEquipmentHistoryScreen> {
         "unit_price": int.parse(_priceController.text.replaceAll(',', '')),
         "total_price": _totalAmount,
         "note": _noteController.text,
-        "processed_by": widget.userName,                 
+        "processed_by": widget.userName,   
+        "parent_id": _targetParentId,              
       };
 
       // 3. 서버에 POST 요청       
@@ -101,25 +108,12 @@ class _MngEquipmentHistoryScreenState extends State<MngEquipmentHistoryScreen> {
       );
 
       if (response.statusCode == 200) {
-        final result = json.decode(utf8.decode(response.bodyBytes));
-        
-        if (result['success'] == true) {
-          if (mounted) {        
-            // 4. 성공 시 처리
-            Navigator.pop(context); // 바텀 시트 닫기
-            
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text("입출고 기록이 저장되었습니다.")),
-            );
-          }
-
-          // 🎯 부모 화면 데이터 새로고침
-          _fetchHistory();                   
-        } else {
-          throw Exception(result['message'] ?? "저장 실패");
-        }
+        _showMessage("성공적으로 저장되었습니다.", Colors.green);
+        if (!mounted) return;
+        Navigator.pop(context);
+        _fetchHistory();
       } else {
-        throw Exception("서버 응답 에러: ${response.statusCode}");
+        _showMessage("저장에 실패했습니다. 다시 시도해주세요.", Colors.red);
       }
     } catch (e) {
       debugPrint("기록 저장 중 오류 발생: $e");
@@ -209,6 +203,62 @@ class _MngEquipmentHistoryScreenState extends State<MngEquipmentHistoryScreen> {
           },
         );
       },
+    );
+  }
+
+  // 🎯 1. 입력값 검증 (수량, 단가, 재고 체크)
+  void _validateForm() {
+    setState(() {
+      int qty = int.tryParse(_qtyController.text.replaceAll(',', '')) ?? 0;
+      int price = int.tryParse(_priceController.text.replaceAll(',', '')) ?? 0;
+      int effectiveStock = _currentStock ?? widget.equipment.stock;
+
+      // 공통: 1개 이상 입력
+      bool basicOk = qty >= 1;
+      bool specificOk = false;
+
+      switch (_selectedType) {
+        case "입고":
+          // 1. 수량, 단가(0원 이상) 모두 입력
+          specificOk = price >= 0; 
+          break;
+        case "출고":
+          // 2. 대상 선택 + 수량 + 단가 + 재고 이내
+          specificOk = _selectedMember != null && price >= 0 && qty <= effectiveStock;
+          break;
+        case "입고취소":
+          // 3. 수량 + 단가(0원 고정) + 취소가능 수량 이내
+          specificOk = qty <= _memberOutStock;
+          break;
+        case "출고취소":
+          // 4. 대상 선택 + 수량 + 단가 + 취소가능 수량 이내
+          specificOk = _selectedMember != null && qty <= _memberOutStock;
+          break;
+      }
+
+      isFormValid = basicOk && specificOk;
+    });
+  }
+
+  // 🎯 2. 합계 금액 계산 및 검증 호출
+  void _updateTotalAmount() {
+    int qty = int.tryParse(_qtyController.text.replaceAll(',', '')) ?? 0;
+    int price = int.tryParse(_priceController.text.replaceAll(',', '')) ?? 0;
+    setState(() {
+      _totalAmount = qty * price;
+    });
+    _validateForm(); // 👈 값 바뀔 때마다 검증 실행
+  }
+
+  // 🎯 3. 간단 메시지 출력
+  void _showMessage(String message, Color color) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: color,
+        duration: const Duration(seconds: 2),
+      ),
     );
   }
 
@@ -340,45 +390,11 @@ class _MngEquipmentHistoryScreenState extends State<MngEquipmentHistoryScreen> {
   }
 
   Widget _buildTransactionDetail(StateSetter setModalState, bool isDetail) {
-    // 1. 기본 입력값 파싱
-    int inputQty = int.tryParse(_qtyController.text.replaceAll(',', '')) ?? 0;
-    String cleanPrice = _priceController.text.replaceAll(',', '');
-    bool isQtyValid = inputQty >= 1;
-    bool isPriceValid = cleanPrice.isNotEmpty && int.tryParse(cleanPrice) != null;
+    // 1. 현재 상태값 가져오기 (이미 _validateForm에서 계산된 값들 활용)
     bool readOnly = isDetail;
-     
-    // 2. 🚨 논리적 재고/수량 체크 로직
-    bool isStockValid = true;
-    String? errorMessage;
-    int? maxCancelable; // 취소 가능 최대 수량
-
-    // 등록 모드에서만 에러체크
-    if (!readOnly) {
-      if (_selectedType == "출고") {      
-        // [출고] 현재 재고보다 많이 나갈 수 없음 [cite: 59]
-        isStockValid = inputQty <= (widget.equipment.stock);
-        if (!isStockValid) errorMessage = "재고 부족 (최대 ${widget.equipment.stock}개)";
-      } 
-      else if (_selectedType == "입고취소") {
-        // [입고취소] 입고를 취소하면 재고가 빠지므로, 현재 재고보다 많이 취소할 수 없음
-        isStockValid = inputQty <= (widget.equipment.stock);
-        if (!isStockValid) errorMessage = "취소 가능 수량 초과 (최대 ${widget.equipment.stock}개)";
-      }
-      else if (_selectedType == "출고취소") {
-        // [출고취소] 특정 회원이 빌려간 수량보다 많이 반납(취소)할 수는 없음
-        maxCancelable = _memberOutStock;
-        if (_selectedMember == null) {
-          isStockValid = false;
-          errorMessage = "취소할 대상 회원을 선택해주세요.";
-        } else if (inputQty > maxCancelable) {
-          errorMessage = "회원 출고 수량 초과 (최대 $maxCancelable개)";
-        }
-      }
-    }
-    // 4. 최종 버튼 활성화 여부
-    // 수량/단가 기본 조건 통과 + (출고라면 재고 조건까지 통과)
-    bool isFormValid = isQtyValid && isPriceValid && isStockValid;
-
+    int effectiveStock = _currentStock ?? widget.equipment.stock;
+    int inputQty = int.tryParse(_qtyController.text.replaceAll(',', '')) ?? 0;
+       
     return Container(
       decoration: const BoxDecoration(
         color: Colors.white,
@@ -403,14 +419,39 @@ class _MngEquipmentHistoryScreenState extends State<MngEquipmentHistoryScreen> {
                 ButtonSegment(value: '출고취소', label: Text('출고취소')),
               ],
               selected: {_selectedType},
-              onSelectionChanged: readOnly ? null : (val) {
+              onSelectionChanged: (val) async {
+                String newType = val.first;
+
                 setModalState(() {
                   _selectedType = val.first;
-                  // 취소 시에도 출고취소라면 회원을 선택해야 하므로 로직 유지
-                  if (_selectedType == "입고" || _selectedType == "입고취소") {
-                    _selectedMember = null;
+                  if (_selectedType.contains("취소")) {
+                    _priceController.text = "0"; // 취소 시 단가는 0원으로 고정
+                    _updateTotalAmount();
                   }
                 });
+
+                // 취소 한도 데이터 로드
+                if (newType.contains("취소")) {
+                  try {
+                    String url = "${Config.getCancelLimitInfo}/${widget.equipment.id}/$newType";
+                    if (newType == "출고취소" && _selectedMember != null) {
+                      url += "?member_id=${_selectedMember!.id}";
+                    }
+
+                    final res = await http.get(Uri.parse(url));
+                    if (res.statusCode == 200) {
+                      final data = json.decode(res.body);
+                      setModalState(() {
+                        // 단가 무시 로직이므로 quantity만 중요
+                        _memberOutStock = data['quantity'] ?? 0;
+                        _qtyController.text = _memberOutStock.toString(); // 최대치 자동 입력
+                        _updateTotalAmount(); // 합계 및 검증 갱신
+                      });
+                    }
+                  } catch (e) {
+                    debugPrint("한도 로드 실패: $e");
+                  }
+                }
               },
             ),
           ),
@@ -461,24 +502,39 @@ class _MngEquipmentHistoryScreenState extends State<MngEquipmentHistoryScreen> {
             readOnly: readOnly,
             keyboardType: TextInputType.number,
             decoration: InputDecoration(
-              labelText: _selectedType == "출고취소"
-                ? "수량 (1개 이상, 취소가능 수량: ${_selectedMember == null ? '-' : _memberOutStock}개)"
-                : "수량 (1개 이상 , 현재 재고: ${widget.equipment.stock})",
+              labelText: _selectedType == "입고취소" 
+                ? "입고취소 (최대 $_memberOutStock개 가능)" 
+                : _selectedType == "출고취소"
+                    ? "출고취소 (회원보유: $_memberOutStock개)"
+                    : "수량 (현재고: $effectiveStock개)",
               border: const OutlineInputBorder(),
-              errorText: errorMessage,
+              errorText: (_selectedType == "출고" && inputQty > effectiveStock)
+                ? "재고가 부족합니다"
+                : (_selectedType.contains("취소") && inputQty > _memberOutStock)
+                    ? "취소 가능 한도를 초과했습니다"
+                    : null,
             ),
-            onChanged: (_) => setModalState(() {
-              _totalAmount = (int.tryParse(_qtyController.text) ?? 0) * (int.tryParse(_priceController.text.replaceAll(',', '')) ?? 0);
-            }),
+            onChanged: (val) {
+              // 🎯 합계 계산 + 검증 + 모달 UI 갱신을 한 번에!
+              setModalState(() {
+                _updateTotalAmount(); 
+              });
+            },
           ),
           const SizedBox(height: 15),
 
           // 단가 입력
           TextField(
             controller: _priceController,
-            readOnly: readOnly,
+            readOnly: _selectedType.contains("취소"),   // 취소 일 때는 단가 고정
             keyboardType: TextInputType.number,
-            decoration: const InputDecoration(labelText: "단가 (원), 0원 이상", border: OutlineInputBorder()),
+            decoration: InputDecoration(
+              labelText: _selectedType.contains("취소") ? "단가 (취소 시 미포함)" : "단가 (원)",
+              border: OutlineInputBorder(),
+              // 🎯 읽기 전용일 때 바탕색을 회색으로 칠해서 "수정불가"임을 알림
+              filled: _selectedType.contains("취소"),
+              fillColor: _selectedType.contains("취소") ? Colors.grey[200] : null,
+            ),
             onChanged: (value) {
               if (value.isEmpty) return;
 
@@ -499,8 +555,7 @@ class _MngEquipmentHistoryScreenState extends State<MngEquipmentHistoryScreen> {
 
               // 4. 합계 계산 (화면 갱신)
               setModalState(() {
-                int q = int.tryParse(_qtyController.text) ?? 0;
-                _totalAmount = (parsedValue ?? 0) * q;
+                _updateTotalAmount();
               });
             },
           ),

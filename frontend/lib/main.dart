@@ -11,6 +11,10 @@ import 'package:flutter_localizations/flutter_localizations.dart'; // 기본 한
 import 'package:syncfusion_localizations/syncfusion_localizations.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:frontend/utils/formatters.dart';
+import 'package:flutter/services.dart';
+// 개별 화면
 import 'screens/user_invite_screen.dart';
 import 'screens/profile_update_screen.dart';
 import 'screens/club_calendar_screen.dart';
@@ -209,7 +213,12 @@ class _MyHomePageState extends State<MyHomePage> {
   }
 
   // 로그아웃 함수 (영님의 main.py 로직 반영)
-  void _handleLogout() {
+  void _handleLogout() async {
+
+    // 기기에 저장된 자동 로그인 정보 삭제
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.clear(); // 모든 저장 정보 삭제 (saved_id, auto_login 등)
+
     setState(() {
       _isLoggedIn = false;
       _userName = "";
@@ -364,7 +373,33 @@ class LoginFormWidget extends StatefulWidget {
 
 class _LoginFormWidgetState extends State<LoginFormWidget> {
   final _idController = TextEditingController();
-  final _pwController = TextEditingController();
+  final _pwController = TextEditingController();  
+  bool _isAutoLogin = true;
+
+  @override
+  void initState() {
+    super.initState();
+    // 🎯 앱 시작 시 자동 로그인 여부 확인
+    _checkAutoLogin();
+  }
+
+  Future<void> _checkAutoLogin() async {
+    final prefs = await SharedPreferences.getInstance();
+    final isAuto = prefs.getBool('auto_login') ?? false;
+    
+    if (isAuto) {
+      final id = prefs.getString('saved_id');
+      final name = prefs.getString('saved_name');
+      final role = prefs.getString('saved_role');
+
+      if (id != null && name != null && role != null) {
+        // 🎯 이미 정보가 있다면 로그인 절차 없이 바로 메인으로 진입
+        if (mounted) {
+          widget.onLoginSuccess(name, role, id);
+        }
+      }
+    }
+  }
 
   Future<void> _login() async {
     //print("로그인 버튼 클릭됨");
@@ -383,6 +418,14 @@ class _LoginFormWidgetState extends State<LoginFormWidget> {
 
       final data = jsonDecode(response.body);
       if (data['success']) {
+        // 로그인 상태 유지 체크 시 정보 저장
+        if (_isAutoLogin) {
+          final prefs = await SharedPreferences.getInstance();
+          await prefs.setBool('auto_login', true);
+          await prefs.setString('saved_id', data['user']['id']);
+          await prefs.setString('saved_name', data['user']['name']);
+          await prefs.setString('saved_role', data['user']['role']);
+        }
         if(mounted) {
           widget.onLoginSuccess(data['user']['name'], data['user']['role'], data['user']['id']);
         }
@@ -411,6 +454,30 @@ class _LoginFormWidgetState extends State<LoginFormWidget> {
             TextField(controller: _idController, decoration: const InputDecoration(labelText: '아이디', prefixIcon: Icon(Icons.person))),
             const SizedBox(height: 15),
             TextField(controller: _pwController, decoration: const InputDecoration(labelText: '비밀번호', prefixIcon: Icon(Icons.lock)), obscureText: true),
+            const SizedBox(height: 15),
+            Row(
+              children: [
+                SizedBox(
+                  width: 24,
+                  height: 24,
+                  child: Checkbox(
+                    value: _isAutoLogin,
+                    onChanged: (value) {
+                      setState(() {
+                        _isAutoLogin = value!;
+                      });
+                    },
+                    side: const BorderSide(color: Colors.black),
+                    activeColor: const Color(0xFF6366F1), // 보라색 포인트
+                  ),
+                ),
+                const SizedBox(width: 8),
+                const Text(
+                  "로그인 상태 유지",
+                  style: TextStyle(color: Colors.black, fontSize: 14),
+                ),
+              ],
+            ),
             const SizedBox(height: 30),
             ElevatedButton(
               onPressed: _login,
@@ -543,7 +610,10 @@ class _RegisterFormWidgetState extends State<RegisterFormWidget> {
             _buildTextField(_userIdController, "아이디", Icons.person_outline),
             _buildTextField(_emailController, "초대받은 이메일", Icons.email_outlined),
             _buildTextField(_nameController, "이름", Icons.badge_outlined),
-            _buildTextField(_phoneController, "전화번호 (예: 010-1234-5678)", Icons.phone_android),
+            _buildTextField(_phoneController, "전화번호", Icons.phone_android,
+              keyboardType: TextInputType.number,
+              inputFormatters: [PhoneNumberFormatter()],
+            ),
             _buildTextField(_pwController, "비밀번호", Icons.lock_outline, isObscure: true),
             _buildTextField(_pwConfirmController, "비밀번호 확인", Icons.lock_reset, isObscure: true),
             
@@ -566,12 +636,21 @@ class _RegisterFormWidgetState extends State<RegisterFormWidget> {
   }
 
   // 텍스트 필드 중복 코드를 줄이기 위한 위젯 함수
-  Widget _buildTextField(TextEditingController controller, String label, IconData icon, {bool isObscure = false}) {
+  Widget _buildTextField(
+    TextEditingController controller, 
+    String label, 
+    IconData icon, {
+      bool isObscure = false,
+      List<TextInputFormatter>? inputFormatters,
+      TextInputType? keyboardType
+    }) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 15),
       child: TextField(
         controller: controller,
         obscureText: isObscure,
+        inputFormatters: inputFormatters,
+        keyboardType: keyboardType,
         decoration: InputDecoration(
           labelText: label,
           prefixIcon: Icon(icon, color: const Color(0xFF166534)),

@@ -17,6 +17,7 @@ class PaymentInfo {
   final String payItem;   // 결제 항목 (식대, 유류비 등)
   final int amount;       // 금액 (정수)
   final bool isPaid;      // 결제 여부
+  final String? payMethod;  // 결제 방법
   final String? note;     // 비고
   final String? targetMonth; // 대상 연월 (yyyy-MM)
 
@@ -26,6 +27,7 @@ class PaymentInfo {
     required this.payItem,
     required this.amount,
     required this.isPaid,
+    this.payMethod,
     this.note,
     this.targetMonth,
   });
@@ -39,6 +41,7 @@ class PaymentInfo {
       amount: json['amount'] ?? 0,
       // 서버의 0/1 값을 bool로 안전하게 변환[cite: 5]
       isPaid: json['is_paid'] == 1 || json['is_paid'] == true,
+      payMethod: json['pay_method'],
       note: json['note'],
       targetMonth: json['target_month'],
     );
@@ -53,7 +56,7 @@ class PaymentInfo {
       'amount': amount,
       'is_paid': isPaid ? 1 : 0, // 서버 DB 타입에 맞춰 변환[cite: 5]
       'note': note,
-      'target_month': targetMonth,
+      'target_month': payItem == "장비료" ? null : targetMonth,
     };
   }
 }
@@ -137,6 +140,7 @@ class _MngPaymentScreenState extends State<MngPaymentScreen> {
     required String memberId,
     required String selectedUser,
     required String selectedItem,
+    required String selectedPayMethod,
     required String amountText,
     required bool isPaid,
     required String note,
@@ -154,10 +158,11 @@ class _MngPaymentScreenState extends State<MngPaymentScreen> {
       "member_id": isEdit ? null : memberId,
       "name": selectedUser,
       "pay_item": selectedItem,    // 서버 DB 컬럼명과 일치
+      "pay_method": selectedPayMethod,
       "amount": finalAmount,        // int 타입으로 전송
       "is_paid": isPaid,        // bool로 보내면 서버에서 0/1 처리
       "note": note,
-      "target_month": targetMonth,
+      "target_month": selectedItem == "장비료" ? null : targetMonth,
       "created_by": widget.userId,
     };
 
@@ -311,7 +316,9 @@ class _MngPaymentScreenState extends State<MngPaymentScreen> {
                               onTap: () => _showPaymentDialog(payment: info, isEdit: true),
                               child: ListTile(
                                 title: Text(info.name, style: const TextStyle(fontWeight: FontWeight.bold)),
-                                subtitle: Text("${info.targetMonth} / ${info.payItem}"),
+                                subtitle: Text(info.payItem == "장비료"
+                                  ? info.payItem
+                                  : "${info.targetMonth} / ${info.payItem}"),
                                 trailing: Row(
                                   mainAxisSize: MainAxisSize.min,
                                   children: [
@@ -353,6 +360,7 @@ class _MngPaymentScreenState extends State<MngPaymentScreen> {
     String? selectedUser = isEdit ? payment!.name : null;
     String? selectedMemberId = isEdit ? payment!.id.toString() : null;
     String selectedItem = isEdit ? payment!.payItem : "수업료";
+    String selectedPayMethod = isEdit ? (payment!.payMethod ?? "카드") : "카드";
     bool tempIsPaid = isEdit ? payment!.isPaid : false;
     
     final amountController = TextEditingController(
@@ -476,74 +484,91 @@ class _MngPaymentScreenState extends State<MngPaymentScreen> {
                     const SizedBox(height: 20),
 
                     // 📅 대상연월 선택 섹션
-                    const Text("결제 대상 연월", style: TextStyle(fontWeight: FontWeight.bold)),
+                    if (selectedItem != "장비료") ...[
+                      const Text("결제 대상 연월", style: TextStyle(fontWeight: FontWeight.bold)),
+                      const SizedBox(height: 8),
+                      Row(
+                        children: [
+                          // 연도 선택 (SegmentedButton)
+                          Expanded(
+                            child: Row(
+                              children: [
+                                Expanded(
+                                  child: DropdownButtonFormField<String>(                                  
+                                    initialValue: localYear,
+                                    decoration: const InputDecoration(
+                                      border: OutlineInputBorder(),
+                                      contentPadding: EdgeInsets.symmetric(horizontal: 10),
+                                    ),
+                                    // 숫자만 들어가게 설정
+                                    items: yearOptions.map((y) => DropdownMenuItem(
+                                      value: y, 
+                                      child: Text(y), 
+                                    )).toList(),
+                                    onChanged: (val) {
+                                      if (val != null) {
+                                        setBottomSheetState(() {
+                                          localYear = val; // 변수 값을 변경하고 UI를 다시 그립니다.
+                                        });
+                                      }
+                                    },
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                const Text("년"), // 연도 옆에 '년' 표시
+                              ],
+                            ),
+                          ),
+                          const SizedBox(width: 15),
+                          
+                          // --- 월 선택 드랍다운 ---
+                          Expanded(
+                            child: Row(
+                              children: [
+                                Expanded(
+                                  child: DropdownButtonFormField<String>(                                  
+                                    initialValue: localMonth,
+                                    decoration: const InputDecoration(
+                                      border: OutlineInputBorder(),
+                                      contentPadding: EdgeInsets.symmetric(horizontal: 10),
+                                    ),
+                                    // 01~12 형식으로 생성
+                                    items: List.generate(12, (i) => (i + 1).toString().padLeft(2, '0'))
+                                        .map((m) => DropdownMenuItem(
+                                          value: m, 
+                                          child: Text(int.parse(m).toString()), // 숫자로 표시
+                                        )).toList(),
+                                    onChanged: (val) {
+                                      if (val != null) {
+                                        setBottomSheetState(() {
+                                          localMonth = val; // 변수 값을 변경하고 UI를 다시 그립니다.
+                                        });
+                                      }
+                                    },
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                const Text("월"), // 월 옆에 '월' 표시
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),                    
+                      const SizedBox(height: 20),
+                    ],
+
+                    // 💳 결제 방법 (🎯 카드/현금 라디오 버튼 스타일)
+                    const Text("결제 방법", style: TextStyle(fontWeight: FontWeight.bold)),
                     const SizedBox(height: 8),
-                    Row(
-                      children: [
-                        // 연도 선택 (SegmentedButton)
-                        Expanded(
-                          child: Row(
-                            children: [
-                              Expanded(
-                                child: DropdownButtonFormField<String>(                                  
-                                  initialValue: localYear,
-                                  decoration: const InputDecoration(
-                                    border: OutlineInputBorder(),
-                                    contentPadding: EdgeInsets.symmetric(horizontal: 10),
-                                  ),
-                                  // 숫자만 들어가게 설정
-                                  items: yearOptions.map((y) => DropdownMenuItem(
-                                    value: y, 
-                                    child: Text(y), 
-                                  )).toList(),
-                                  onChanged: (val) {
-                                    if (val != null) {
-                                      setBottomSheetState(() {
-                                        localYear = val; // 변수 값을 변경하고 UI를 다시 그립니다.
-                                      });
-                                    }
-                                  },
-                                ),
-                              ),
-                              const SizedBox(width: 8),
-                              const Text("년"), // 연도 옆에 '년' 표시
-                            ],
-                          ),
-                        ),
-                        const SizedBox(width: 15),
-                        
-                        // --- 월 선택 드랍다운 ---
-                        Expanded(
-                          child: Row(
-                            children: [
-                              Expanded(
-                                child: DropdownButtonFormField<String>(                                  
-                                  initialValue: localMonth,
-                                  decoration: const InputDecoration(
-                                    border: OutlineInputBorder(),
-                                    contentPadding: EdgeInsets.symmetric(horizontal: 10),
-                                  ),
-                                  // 01~12 형식으로 생성
-                                  items: List.generate(12, (i) => (i + 1).toString().padLeft(2, '0'))
-                                      .map((m) => DropdownMenuItem(
-                                        value: m, 
-                                        child: Text(int.parse(m).toString()), // 숫자로 표시
-                                      )).toList(),
-                                  onChanged: (val) {
-                                    if (val != null) {
-                                      setBottomSheetState(() {
-                                        localMonth = val; // 변수 값을 변경하고 UI를 다시 그립니다.
-                                      });
-                                    }
-                                  },
-                                ),
-                              ),
-                              const SizedBox(width: 8),
-                              const Text("월"), // 월 옆에 '월' 표시
-                            ],
-                          ),
-                        ),
+                    SegmentedButton<String>(
+                      segments: const [
+                        ButtonSegment(value: "카드", label: Text("카드"), icon: Icon(Icons.credit_card)),
+                        ButtonSegment(value: "현금", label: Text("현금"), icon: Icon(Icons.payments_outlined)),
                       ],
+                      selected: {selectedPayMethod},
+                      onSelectionChanged: (newSelection) {
+                        setBottomSheetState(() => selectedPayMethod = newSelection.first);
+                      },
                     ),
                     const SizedBox(height: 20),
 
@@ -609,6 +634,7 @@ class _MngPaymentScreenState extends State<MngPaymentScreen> {
                             memberId: selectedMemberId ?? "",
                             selectedUser: selectedUser!,
                             selectedItem: selectedItem,
+                            selectedPayMethod: selectedPayMethod,
                             amountText: amountController.text,
                             isPaid: tempIsPaid,
                             note: noteController.text,

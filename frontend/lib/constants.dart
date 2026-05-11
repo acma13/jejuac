@@ -63,6 +63,7 @@ class Config {
   static const String updateEquipment = "$baseUrl/api/update_equipment"; // 장비 수정
   static const String deleteEquipment = "$baseUrl/api/delete_equipment"; // 장비 삭제 (장비 입출고 내역이 있으면 삭제 불가)
   static const String addTradeList = "$baseUrl/api/add_trade_list"; // 장비 입출고 내역 등록
+  static const String getCancelLimitInfo = "$baseUrl/api/get_cancel_limit_info";  // 특정회원의 마지막 출고 기록 조회
 
   // 결제 관련
   static const String addPayment = "$baseUrl/api/add_payment";
@@ -72,6 +73,10 @@ class Config {
   
   // 데이터 마이그레이션 관련
   static const String uploadMembersList = "$baseUrl/api/upload_members_list";
+  static const String uploadSecheduleList = "$baseUrl/api/upload_schedule_list";
+  static const String uploadTodoList = "$baseUrl/api/upload_todo_list";
+  static const String uploadPaymentsList = "$baseUrl/api/upload_payments_list";
+  static const String uploadInvitedEmail = "$baseUrl/api/upload_invited_email";
   
   // Q&A 관련
   static const String addQna = "$baseUrl/api/add_qna";
