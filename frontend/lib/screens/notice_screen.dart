@@ -334,7 +334,7 @@ class _NoticeScreenState extends State<NoticeScreen> {
                 isAdmin
                     ? TextField(
                         controller: _contentController,
-                        maxLines: 8,
+                        maxLines: 7,
                         decoration: const InputDecoration(
                           labelText: '내용',
                           alignLabelWithHint: true,

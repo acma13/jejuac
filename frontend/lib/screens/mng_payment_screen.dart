@@ -162,7 +162,7 @@ class _MngPaymentScreenState extends State<MngPaymentScreen> {
       "amount": finalAmount,        // int 타입으로 전송
       "is_paid": isPaid,        // bool로 보내면 서버에서 0/1 처리
       "note": note,
-      "target_month": selectedItem == "장비료" ? null : targetMonth,
+      "target_month": (selectedItem == "장비료") ? "" : targetMonth,
       "created_by": widget.userId,
     };
 
@@ -233,9 +233,11 @@ class _MngPaymentScreenState extends State<MngPaymentScreen> {
         body: json.encode({
           "id": info.id,             // 모델에 정의된 'id'와 일치
           "pay_item": info.payItem,
+          "pay_method": info.payMethod ?? "카드",
           "amount": info.amount,
           "is_paid": !info.isPaid,   // bool 타입 그대로 전송
           "note": info.note ?? "",   // 필수 필드이므로 null 방지
+          "target_month": info.targetMonth ?? "",
         }),
       );
 
@@ -596,7 +598,7 @@ class _MngPaymentScreenState extends State<MngPaymentScreen> {
                     // 비고
                     TextField(
                       controller: noteController,
-                      readOnly: isEdit, 
+                      // readOnly: isEdit, 
                       maxLines: 2, // 여러 줄 입력 가능
                       decoration: const InputDecoration(
                         labelText: "비고 (선택 사항)",

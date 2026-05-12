@@ -398,7 +398,7 @@ class _ClubCalendarScreenState extends State<ClubCalendarScreen> {
                     TextField(controller: titleController, decoration: const InputDecoration(labelText: "일정 제목", prefixIcon: Icon(Icons.title))),
                     TextField(controller: managerController, decoration: const InputDecoration(labelText: "담당자", prefixIcon: Icon(Icons.person))),
                     TextField(controller: locationController, decoration: const InputDecoration(labelText: "장소", prefixIcon: Icon(Icons.location_on))),
-                    TextField(controller: contentController, decoration: const InputDecoration(labelText: "상세 내용", prefixIcon: Icon(Icons.notes)), maxLines: 2),
+                    TextField(controller: contentController, decoration: const InputDecoration(labelText: "상세 내용", prefixIcon: Icon(Icons.notes)), maxLines: 3),
 
                     const SizedBox(height: 20),
 

@@ -335,8 +335,7 @@ class _TodoPageState extends State<TodoPage> {
           title: Text(todo.title, style: const TextStyle(fontWeight: FontWeight.bold)),
           subtitle: Text("마감: ${todo.dueDate} | 담당: ${todo.assignee}"),
           trailing: const Icon(Icons.chevron_right, size: 16),
-          onTap: () {
-            // TODO: 바텀업 시트 수정/삭제
+          onTap: () {            
             _openTodoEditor(todo);
           }
         ),
@@ -357,206 +356,208 @@ class _TodoPageState extends State<TodoPage> {
           topRight: Radius.circular(20),
         ),
       ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          // 상단 핸들러 (공지사항 스타일) [cite: 51]
-          Center(
-            child: Container(
-              margin: const EdgeInsets.only(top: 12, bottom: 8),
-              width: 40, height: 4,
-              decoration: BoxDecoration(color: Colors.grey[300], borderRadius: BorderRadius.circular(2)),
+      child: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // 상단 핸들러 (공지사항 스타일) [cite: 51]
+            Center(
+              child: Container(
+                margin: const EdgeInsets.only(top: 12, bottom: 8),
+                width: 40, height: 4,
+                decoration: BoxDecoration(color: Colors.grey[300], borderRadius: BorderRadius.circular(2)),
+              ),
             ),
-          ),
-          
-          SingleChildScrollView(
-            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    // 완료 상태일 때만 앞에 체크 아이콘 표시
-                    if (todo.isCompleted) ...[
-                      const Icon(Icons.check_circle, color: Color(0xFF166534), size: 24),
-                      const SizedBox(width: 8),
-                    ],
-                    
-                    // 상황에 맞는 텍스트 출력
-                    Expanded(
-                      child: Text(
-                        todo.isCompleted 
-                            ? "할 일 상세 보기" 
-                            : (isEdit ? "할 일 수정" : "새로운 할 일 등록"),
-                        style: const TextStyle(
-                          fontSize: 20, 
-                          fontWeight: FontWeight.bold,
-                          color: Colors.black87,
-                        ),
-                        overflow: TextOverflow.ellipsis, // 혹시 제목이 너무 길면 말줄임표 처리
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 20),
-
-                // 제목 입력창 [cite: 62, 63]
-                TextField(
-                  controller: _titleController,
-                  enabled: !todo.isCompleted,
-                  style: const TextStyle(fontWeight: FontWeight.bold),
-                  decoration: const InputDecoration(
-                    labelText: '할 일 제목',
-                    border: OutlineInputBorder(),
-                    filled: true,
-                    fillColor: Colors.white,
-                  ),
-                ),
-                const SizedBox(height: 15),
-
-                // 마감일 선택 (달력) 
-                InkWell(
-                  onTap: todo.isCompleted ? null : () async {
-                    DateTime? picked = await showDatePicker(
-                      context: context,
-                      initialDate: isEdit ? DateTime.parse(todo.dueDate) : DateTime.now(),
-                      firstDate: DateTime(2024),
-                      lastDate: DateTime(2101),
-                    );
-                    if (picked != null) {
-                      setModalState(() {
-                        _selectedDate = picked.toString().split(' ')[0];
-                      });
-                    }
-                  },
-                  child: InputDecorator(
-                    decoration: InputDecoration(
-                      labelText: "마감 기한",
-                      border: OutlineInputBorder(),
-                      enabled: !todo.isCompleted,
-                      filled: todo.isCompleted,
-                      fillColor: todo.isCompleted ? Colors.grey[100] : null,
-                    ),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text(
-                          _selectedDate, 
-                          style: TextStyle(
-                            fontSize: 16,
-                            color: todo.isCompleted ? Colors.grey[600] : Colors.black87,
-                          )
-                        ),
-                        Icon(
-                          Icons.calendar_today, 
-                          color: todo.isCompleted ? Colors.grey : Color(0xFF166534)),
+            
+            SingleChildScrollView(
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      // 완료 상태일 때만 앞에 체크 아이콘 표시
+                      if (todo.isCompleted) ...[
+                        const Icon(Icons.check_circle, color: Color(0xFF166534), size: 24),
+                        const SizedBox(width: 8),
                       ],
+                      
+                      // 상황에 맞는 텍스트 출력
+                      Expanded(
+                        child: Text(
+                          todo.isCompleted 
+                              ? "할 일 상세 보기" 
+                              : (isEdit ? "할 일 수정" : "새로운 할 일 등록"),
+                          style: const TextStyle(
+                            fontSize: 20, 
+                            fontWeight: FontWeight.bold,
+                            color: Colors.black87,
+                          ),
+                          overflow: TextOverflow.ellipsis, // 혹시 제목이 너무 길면 말줄임표 처리
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 20),
+
+                  // 제목 입력창 [cite: 62, 63]
+                  TextField(
+                    controller: _titleController,
+                    enabled: !todo.isCompleted,
+                    style: const TextStyle(fontWeight: FontWeight.bold),
+                    decoration: const InputDecoration(
+                      labelText: '할 일 제목',
+                      border: OutlineInputBorder(),
+                      filled: true,
+                      fillColor: Colors.white,
                     ),
                   ),
-                ),
-                const SizedBox(height: 15),
+                  const SizedBox(height: 15),
 
-                // 담당자 입력창
-                TextField(
-                  controller: _assigneeController,
-                  enabled: !todo.isCompleted,
-                  decoration: const InputDecoration(
-                    labelText: '담당자',
-                    border: OutlineInputBorder(),
+                  // 마감일 선택 (달력) 
+                  InkWell(
+                    onTap: todo.isCompleted ? null : () async {
+                      DateTime? picked = await showDatePicker(
+                        context: context,
+                        initialDate: isEdit ? DateTime.parse(todo.dueDate) : DateTime.now(),
+                        firstDate: DateTime(2024),
+                        lastDate: DateTime(2101),
+                      );
+                      if (picked != null) {
+                        setModalState(() {
+                          _selectedDate = picked.toString().split(' ')[0];
+                        });
+                      }
+                    },
+                    child: InputDecorator(
+                      decoration: InputDecoration(
+                        labelText: "마감 기한",
+                        border: OutlineInputBorder(),
+                        enabled: !todo.isCompleted,
+                        filled: todo.isCompleted,
+                        fillColor: todo.isCompleted ? Colors.grey[100] : null,
+                      ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            _selectedDate, 
+                            style: TextStyle(
+                              fontSize: 16,
+                              color: todo.isCompleted ? Colors.grey[600] : Colors.black87,
+                            )
+                          ),
+                          Icon(
+                            Icons.calendar_today, 
+                            color: todo.isCompleted ? Colors.grey : Color(0xFF166534)),
+                        ],
+                      ),
+                    ),
                   ),
-                ),
-                const SizedBox(height: 15),
+                  const SizedBox(height: 15),
 
-                // 세부 내용 입력창 [cite: 69, 70]
-                TextField(
-                  controller: _contentController,
-                  enabled: !todo.isCompleted,
-                  maxLines: 5,
-                  decoration: const InputDecoration(
-                    labelText: '세부 내용',
-                    alignLabelWithHint: true,
-                    border: OutlineInputBorder(),
+                  // 담당자 입력창
+                  TextField(
+                    controller: _assigneeController,
+                    enabled: !todo.isCompleted,
+                    decoration: const InputDecoration(
+                      labelText: '담당자',
+                      border: OutlineInputBorder(),
+                    ),
                   ),
-                ),
-                const SizedBox(height: 15),
-                // 첨부파일 URL 입력창
-                TextField(
-                  controller: _urlController,
-                  enabled: !todo.isCompleted,
-                  decoration: const InputDecoration(
-                    labelText: '파일 URL',
-                    border: OutlineInputBorder(),
-                  ),
-                ),
-                
-                const SizedBox(height: 24),
+                  const SizedBox(height: 15),
 
-                // 하단 버튼들 (공지사항 스타일 그대로) [cite: 79, 87]
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.end,
-                  children: [
-                    if (isEdit && !todo.isCompleted) // 수정 모드 이면서 완료되지 않은 상태 일 때만 노출
-                      TextButton.icon(
-                        onPressed: () async {
-                          // 삭제 로직 호출 (이미 만드신 delete_todo 사용)
-                          bool confirm = await _showDeleteConfirmDialog();
-                          if (confirm) {
-                            // ... 삭제 API 호출 ...
+                  // 세부 내용 입력창 [cite: 69, 70]
+                  TextField(
+                    controller: _contentController,
+                    enabled: !todo.isCompleted,
+                    maxLines: 5,
+                    decoration: const InputDecoration(
+                      labelText: '세부 내용',
+                      alignLabelWithHint: true,
+                      border: OutlineInputBorder(),
+                    ),
+                  ),
+                  const SizedBox(height: 15),
+                  // 첨부파일 URL 입력창
+                  TextField(
+                    controller: _urlController,
+                    enabled: !todo.isCompleted,
+                    decoration: const InputDecoration(
+                      labelText: '파일 URL',
+                      border: OutlineInputBorder(),
+                    ),
+                  ),
+                  
+                  const SizedBox(height: 24),
+
+                  // 하단 버튼들 (공지사항 스타일 그대로) [cite: 79, 87]
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.end,
+                    children: [
+                      if (isEdit && !todo.isCompleted) // 수정 모드 이면서 완료되지 않은 상태 일 때만 노출
+                        TextButton.icon(
+                          onPressed: () async {
+                            // 삭제 로직 호출 (이미 만드신 delete_todo 사용)
+                            bool confirm = await _showDeleteConfirmDialog();
                             if (confirm) {
-                              bool success = await deleteTodo(todo.id!);
-                              if (success) {
-                                if (mounted) Navigator.pop(context); // 바텀시트 닫기
-                                await _fetchTodos(); // 목록 새로고침
-                              }
-                            }                                                        
-                          }
-                        },
-                        icon: const Icon(Icons.delete_outline, color: Colors.red),
-                        label: const Text('삭제', style: TextStyle(color: Colors.red)),
-                      ),
-                    const SizedBox(width: 12),
-                    
-                    if(!todo.isCompleted) // 완료된 상태가 아닐 경우에만 노출
-                      ElevatedButton.icon(
-                        onPressed: () async {
-                          if (_titleController.text.isEmpty) return;
-                          
-                          // 저장/수정 API 로직 [cite: 91, 92]
-                          bool success;
-                          if (!isEdit) {
-                            success = await _addTodo(); // 등록 API
-                          } else {
-                            // todo.id 뒤에 !를 붙여서 '이 ID는 절대 비어있지 않음'을 컴파일러에게 알려줍니다.
-                            success = await _updateTodo(todo.id!); // 수정 API
-                          }
-
-                          if (success) {
-                            if (mounted) Navigator.pop(context);
-                            await _fetchTodos(); // 목록 새로고침 [cite: 95]
-                          } else {
-                              if (mounted) {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(content: Text("저장에 실패했습니다. 다시 시도해주세요."))
-                              );
+                              // ... 삭제 API 호출 ...
+                              if (confirm) {
+                                bool success = await deleteTodo(todo.id!);
+                                if (success) {
+                                  if (mounted) Navigator.pop(context); // 바텀시트 닫기
+                                  await _fetchTodos(); // 목록 새로고침
+                                }
+                              }                                                        
                             }
-                          }
-                        },
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: const Color(0xFF166534),
-                          foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                          },
+                          icon: const Icon(Icons.delete_outline, color: Colors.red),
+                          label: const Text('삭제', style: TextStyle(color: Colors.red)),
                         ),
-                        icon: const Icon(Icons.save),
-                        label: Text(isEdit ? '저장하기' : '등록하기'),
-                      ),
-                  ],
-                ),
-                // 키보드 대응 여백 [cite: 98]
-                SizedBox(height: MediaQuery.of(context).viewInsets.bottom + 20),
-              ],
+                      const SizedBox(width: 12),
+                      
+                      if(!todo.isCompleted) // 완료된 상태가 아닐 경우에만 노출
+                        ElevatedButton.icon(
+                          onPressed: () async {
+                            if (_titleController.text.isEmpty) return;
+                            
+                            // 저장/수정 API 로직 [cite: 91, 92]
+                            bool success;
+                            if (!isEdit) {
+                              success = await _addTodo(); // 등록 API
+                            } else {
+                              // todo.id 뒤에 !를 붙여서 '이 ID는 절대 비어있지 않음'을 컴파일러에게 알려줍니다.
+                              success = await _updateTodo(todo.id!); // 수정 API
+                            }
+
+                            if (success) {
+                              if (mounted) Navigator.pop(context);
+                              await _fetchTodos(); // 목록 새로고침 [cite: 95]
+                            } else {
+                                if (mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(content: Text("저장에 실패했습니다. 다시 시도해주세요."))
+                                );
+                              }
+                            }
+                          },
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(0xFF166534),
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                          ),
+                          icon: const Icon(Icons.save),
+                          label: Text(isEdit ? '저장하기' : '등록하기'),
+                        ),
+                    ],
+                  ),
+                  // 키보드 대응 여백 [cite: 98]
+                  SizedBox(height: MediaQuery.of(context).viewInsets.bottom + 20),
+                ],
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
