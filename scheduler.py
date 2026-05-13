@@ -2,6 +2,7 @@ import sqlite3
 import time
 import firebase_admin
 import os
+from pytz import timezone
 from datetime import datetime, timedelta
 from apscheduler.schedulers.background import BackgroundScheduler
 from firebase_admin import credentials, messaging
@@ -54,18 +55,19 @@ def check_and_send_alarms(target_date, alarm_type):
 
 # 4. 스케줄러 작업 정의
 def morning_job():
-    today = datetime.now().strftime('%Y-%m-%d')
+    today = datetime.now(timezone('Asia/Seoul')).strftime('%Y-%m-%d')
     check_and_send_alarms(today, "오늘")
 
 def evening_job():
-    tomorrow = (datetime.now() + timedelta(days=1)).strftime('%Y-%m-%d')
+    tomorrow = (datetime.now(timezone('Asia/Seoul')) + timedelta(days=1)).strftime('%Y-%m-%d')
     check_and_send_alarms(tomorrow, "내일")
 
 # 테스트용
 # send_fcm_notification("[제주양궁클럽] 테스트", "지금 알람 가나요?")
 
 # 5. 스케줄러 시작
-scheduler = BackgroundScheduler()
+seoul_tz = timezone('Asia/Seoul')
+scheduler = BackgroundScheduler(timezone=seoul_tz)
 # 아침 8시: 당일 알람
 scheduler.add_job(morning_job, 'cron', hour=8, minute=0)
 # 저녁 8시: 전날 리마인드

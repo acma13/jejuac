@@ -526,6 +526,28 @@ class _LoginFormWidgetState extends State<LoginFormWidget> {
                 style: TextStyle(color: Colors.grey, fontSize: 12, decoration: TextDecoration.underline),
               ),
             ),
+            const SizedBox(height: 15),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center, // 가로 중앙 정렬
+              crossAxisAlignment: CrossAxisAlignment.start, // 아이콘이 문구 첫 줄에 맞게 정렬
+              children: [
+                Icon(
+                  Icons.info_outline, // 또는 Icons.priority_high (느낌표)
+                  size: 16,
+                  color: Colors.grey[600],
+                ),
+                const SizedBox(width: 6), // 아이콘과 문구 사이 간격
+                Text(
+                  "비밀번호를 잊으셨나요? 관리자에게 초기화를 요청하세요.",
+                  textAlign: TextAlign.start, // 아이콘 옆이므로 왼쪽 정렬이 자연스러움
+                  style: TextStyle(
+                    color: Colors.grey[600], 
+                    fontSize: 13,
+                    height: 1.4, // 줄간격
+                  ),
+                ),
+              ],
+            ),
           ],
         ),
       ),

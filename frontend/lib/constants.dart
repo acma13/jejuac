@@ -13,7 +13,7 @@ class Config {
   // static const String baseUrl = "http://158.180.89.23:5000";
 
   // 실제 서버는 이것으로 사용 할 것!!!
-  // static const String baseUrl = "https://jejuac.duckdns.org/api";
+  //static const String baseUrl = "https://jejuac.duckdns.org/api";
 
   // 사용자 등록 및 로그인 관련
   static const String invitedEmails = "$baseUrl/api/invited-emails";
@@ -26,6 +26,7 @@ class Config {
   static const String getAllUsers = "$baseUrl/api/get_all_users";
   static const String updateUserRole = "$baseUrl/api/update_user_role";
   static const String deleteUser = "$baseUrl/api/delete_user";
+  static const String resetPassword = "$baseUrl/api/reset_password";
 
   // 클럽일정 관련
   static const String addSchedule = "$baseUrl/api/insert_club_schedule";

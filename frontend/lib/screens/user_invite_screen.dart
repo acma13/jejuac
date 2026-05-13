@@ -146,57 +146,32 @@ class _UserInviteScreenState extends State<UserInviteScreen> {
     }
   }
 
-  // 수정/삭제 바텀시트
-  void _showUserEditSheet(dynamic user) {
-    String selectedRole = user['role'];
+  // 1. 비밀번호 초기화 함수 추가 (클래스 내부에 작성)
+  Future<void> _resetPassword(String userId) async {
+    try {
+      final response = await http.post(
+        Uri.parse(Config.resetPassword),
+        headers: {"Content-Type": "application/json"},
+        body: jsonEncode({
+          'userid': userId,
+          'new_password': '1234', // 초기 비밀번호를 1234로 고정
+        }),
+      );
 
-    showModalBottomSheet(
-      context: context,
-      builder: (context) {
-        return StatefulBuilder( // 바텀시트 내 상태 변경용
-          builder: (context, setSheetState) {
-            return Padding(
-              padding: const EdgeInsets.all(16.0),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Text("사용자 정보 관리", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-                  TextField(controller: TextEditingController(text: user['userid']), decoration: const InputDecoration(labelText: '아이디'), readOnly: true),
-                  TextField(controller: TextEditingController(text: user['name']), decoration: const InputDecoration(labelText: '이름'), readOnly: true),
-                  DropdownButtonFormField<String>(
-                    initialValue: selectedRole,
-                    items: const [
-                      DropdownMenuItem(value: 'Admin', child: Text('Admin')),
-                      DropdownMenuItem(value: 'user', child: Text('user')),
-                    ],
-                    onChanged: (val) => setSheetState(() => selectedRole = val!),
-                    decoration: const InputDecoration(labelText: '권한 설정'),
-                  ),
-                  const SizedBox(height: 20),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: ElevatedButton(
-                          onPressed: () => _updateRole(user['userid'], selectedRole),
-                          child: const Text("수정 저장"),
-                        ),
-                      ),
-                      const SizedBox(width: 10),
-                      ElevatedButton(
-                        style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
-                        onPressed: () => _deleteUser(user['userid']),
-                        child: const Text("삭제", style: TextStyle(color: Colors.white)),
-                      ),
-                    ],
-                  )
-                ],
-              ),
-            );
-          }
-        );
-      },
-    );
-  }
+      final result = jsonDecode(response.body);
+      if (response.statusCode == 200 && result['status'] == 'success') {
+        if (mounted) {
+          Navigator.pop(context);
+
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('비밀번호가 1234로 초기화되었습니다.')),
+          );
+        }        
+      }
+    } catch (e) {
+      debugPrint("비번 초기화 에러: $e");
+    }
+  }  
 
   @override
   Widget build(BuildContext context) {
@@ -260,6 +235,65 @@ class _UserInviteScreenState extends State<UserInviteScreen> {
           ],
         ),
       ),
+    );
+  }
+
+  // 수정/삭제 바텀시트
+  void _showUserEditSheet(dynamic user) {
+    String selectedRole = user['role'];
+
+    showModalBottomSheet(
+      context: context,
+      builder: (context) {
+        return StatefulBuilder( // 바텀시트 내 상태 변경용
+          builder: (context, setSheetState) {
+            return Padding(
+              padding: const EdgeInsets.all(16.0),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Text("사용자 정보 관리", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                  TextField(controller: TextEditingController(text: user['userid']), decoration: const InputDecoration(labelText: '아이디'), readOnly: true),
+                  TextField(controller: TextEditingController(text: user['name']), decoration: const InputDecoration(labelText: '이름'), readOnly: true),
+                  DropdownButtonFormField<String>(
+                    initialValue: selectedRole,
+                    items: const [
+                      DropdownMenuItem(value: 'Admin', child: Text('Admin')),
+                      DropdownMenuItem(value: 'user', child: Text('user')),
+                    ],
+                    onChanged: (val) => setSheetState(() => selectedRole = val!),
+                    decoration: const InputDecoration(labelText: '권한 설정'),
+                  ),
+                  const SizedBox(height: 20),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: ElevatedButton(
+                          onPressed: () => _updateRole(user['userid'], selectedRole),
+                          child: const Text("수정 저장"),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      // --- 비밀번호 초기화 버튼 추가 ---
+                      ElevatedButton(
+                        style: ElevatedButton.styleFrom(backgroundColor: Colors.orange),
+                        onPressed: () => _resetPassword(user['userid']),
+                        child: const Text("비번 초기화", style: TextStyle(color: Colors.white)),
+                      ),
+                      const SizedBox(width: 8),
+                      ElevatedButton(
+                        style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+                        onPressed: () => _deleteUser(user['userid']),
+                        child: const Text("삭제", style: TextStyle(color: Colors.white)),
+                      ),
+                    ],
+                  )
+                ],
+              ),
+            );
+          }
+        );
+      },
     );
   }
 }

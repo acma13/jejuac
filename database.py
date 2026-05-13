@@ -353,6 +353,18 @@ def delete_user(p):
             print(f"User Delete Error: {e}")
             return False
 
+# 비밀번호 초기화
+def reset_password(p, hashed_password):
+    with get_connection() as conn:
+        try:
+            c = conn.cursor()
+            c.execute("UPDATE users SET password = ? WHERE userid = ?", (hashed_password, p.userid))
+            conn.commit()
+            return True
+        except Exception as e:
+            print(f"Initializing Password Error: {e}")
+            return False
+
 # --- [3. TO-DO LIST 관련 함수] ---
 
 def get_all_todos():

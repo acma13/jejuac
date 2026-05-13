@@ -167,10 +167,11 @@ class _QnaScreenState extends State<QnaScreen> {
     final titleController = TextEditingController(text: isEdit ? item['title'] : "");
     final contentController = TextEditingController(text: isEdit ? item['content'] : "");
     final answerController = TextEditingController(text: isEdit ? item['answer'] : "");
-
-    // 1. 답변이 이미 달린 경우 (관리자 제외 모두 수정 불가)
-    // 2. 내 글이 아닌 경우 (관리자 제외 모두 수정 불가)
-    final bool cannotEditQuestion = (!isAdmin && !isOwner) || (isAnswered && !isAdmin);
+    
+    
+    // 새 글(!isEdit)일 때는 무조건 false (누구나 입력 가능).
+    // 기존 글(isEdit)일 때는 관리자(isAdmin)이거나, 내 글이 아니거나(!isOwner), 답변이 달렸으면(isAnswered) 잠금(true).
+    final bool cannotEditQuestion = !isEdit ? false : (isAdmin || !isOwner || isAnswered);
 
     showModalBottomSheet(
       context: context,
@@ -249,6 +250,7 @@ class _QnaScreenState extends State<QnaScreen> {
                             await _sendRequest(Config.answerQna, {
                               "id": item['id'],
                               "answer": answerController.text,
+                              "is_update": isAnswered,
                             }, "답변이 등록되었습니다.");
                           } else {
                             // 본인 질문 수정 (답변 없을 때만)

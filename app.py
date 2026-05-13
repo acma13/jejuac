@@ -173,7 +173,7 @@ async def update_fcm_token(req: TokenUpdateRequest):
         return {"success": True}
     return {"success": False}
     
-# -------------- 공지사항 알림 관련 end ---------------
+# -------------- 알림 관련 end ---------------
 
 # 로그인 처리
 
@@ -319,6 +319,11 @@ class RoleUpdateRequest(BaseModel):
 class UserDeleteRequest(BaseModel):
     userid: str  # 화면에서 보내는 키값과 일치해야 함
 
+class ResetPassword(BaseModel):
+    userid: str
+    new_password: str
+    
+
 # 등록된 모든 유저 정보
 @app.get("/api/get_all_users")
 async def get_all_users():
@@ -338,12 +343,20 @@ async def delete_user(req: UserDeleteRequest):
     if db.delete_user(req):
         return {"status": "success", "message": "사용자가 삭제되었습니다."}
     return {"status": "error", "message": "삭제 실패"}
-    
-# 등록된 클럽 일정 조회
-@app.get("/api/get_schedules")
-async def get_schedules():
-    schedules = db.get_all_schedules()
-    return schedules  # FastAPI가 자동으로 JSON 리스트로 변환해줍니다.
+
+# 비밀번호 초기화.
+@app.post("/api/reset_password")
+async def reset_password(req: ResetPassword):
+    try:
+        hashed_password = auth.make_hashes(req.new_password)
+        if db.reset_password(req, hashed_password):
+            return {"status": "success", "message": "비밀번호가 초기화 되었습니다."}
+        return {"status": "error", "message": "비밀번호 초기화 실패"}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
+
+# ------------------------- 클럽 일정관련 API --------------------------
 
 # 클럽 일정 및 수정에 대한 전용 규격(모델)
 class scheduleRequest(BaseModel):
@@ -360,6 +373,12 @@ class scheduleRequest(BaseModel):
 
 class deleteScheduleRequest(BaseModel):
     id: str
+
+# 등록된 클럽 일정 조회
+@app.get("/api/get_schedules")
+async def get_schedules():
+    schedules = db.get_all_schedules()
+    return schedules  # FastAPI가 자동으로 JSON 리스트로 변환해줍니다.
 
 # 클럽 일정 등록
 @app.post("/api/insert_club_schedule")
@@ -1096,6 +1115,7 @@ class QnaCreateRequest(BaseModel):
 class QnaAnswerRequest(BaseModel):
     id: int
     answer: str
+    is_update: bool = False
 
 class QnaUpdateRequest(BaseModel):
     id: int
@@ -1138,8 +1158,10 @@ async def api_answer_qna(req: QnaAnswerRequest):
             try:
                 push_data = {
                     "token": fcm_token,     
-                    "title": "Q&A 답변 등록 완료",
-                    "body": f"문의하신 '{qna_title}'에 대한 답변이 등록되었습니다.",
+                    "title": "Q&A 답변 수정 완료" if req.is_update else "Q&A 답변 등록 완료",
+                    "body": f"문의하신 '{qna_title}'에 대한 답변이 수정되었습니다." 
+                            if req.is_update else 
+                            f"문의하신 '{qna_title}'에 대한 답변이 등록되었습니다.",
                     "type": "answer_qna_alert"                
                 }
 
