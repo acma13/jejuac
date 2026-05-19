@@ -314,84 +314,93 @@ class _ClubDailylogScreenState extends State<ClubDailylogScreen> {
         // 바텀시트의 전체 최대 높이를 화면 높이의 65%로 고정
         final double availableHeight = MediaQuery.of(context).size.height * 0.65;
 
-        return Padding(
-          padding: EdgeInsets.only(
-            bottom: MediaQuery.of(context).viewInsets.bottom + 20,
-            top: 20, left: 16, right: 16,
-          ),
-          child: SizedBox(
-            height: availableHeight,
-            child: Column(              
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        return StatefulBuilder(
+          builder: (BuildContext context, StateSetter setBottomSheetState) {
+            final bool isButtonEnabled = titleController.text.trim().isNotEmpty && 
+                                         contentController.text.trim().isNotEmpty;
+            return Padding(
+              padding: EdgeInsets.only(
+                bottom: MediaQuery.of(context).viewInsets.bottom + 20,
+                top: 20, left: 16, right: 16,
+              ),
+              child: SizedBox(
+                height: availableHeight,
+                child: Column(              
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      isEditMode ? "클럽일지 상세 ($logDateStr)" : "클럽일지 등록 ($logDateStr)",
-                      style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          isEditMode ? "클럽일지 상세 ($logDateStr)" : "클럽일지 등록 ($logDateStr)",
+                          style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                        ),
+                        if (isEditMode && (isAuthor || isAdmin))
+                          IconButton(
+                            icon: const Icon(Icons.delete, color: Colors.red),
+                            onPressed: () {                          
+                              _showDeleteConfirmDialog(context, log['id']);
+                            },
+                          )
+                      ],
                     ),
-                    if (isEditMode && (isAuthor || isAdmin))
-                      IconButton(
-                        icon: const Icon(Icons.delete, color: Colors.red),
-                        onPressed: () {                          
-                          _showDeleteConfirmDialog(context, log['id']);
-                        },
-                      )
+                    const SizedBox(height: 16),
+                    TextField(
+                      controller: titleController,                    
+                      readOnly: isEditMode && !isAuthor,
+                      onChanged: (text) => setBottomSheetState(() {}),
+                      decoration: const InputDecoration(labelText: '제목', border: OutlineInputBorder()),
+                    ),
+                    const SizedBox(height: 12),
+                    if (isEditMode) ...[
+                      Text("작성자: ${log['username']}", style: TextStyle(color: Colors.grey[600], fontSize: 13)),
+                      const SizedBox(height: 12),
+                    ],
+                    Expanded(                  
+                      child: TextField(
+                        controller: contentController,                    
+                        readOnly: isEditMode && !isAuthor,
+                        maxLines: null,
+                        expands: true,
+                        textAlignVertical: TextAlignVertical.top,                    
+                        keyboardType: TextInputType.multiline,
+                        onChanged: (text) => setBottomSheetState(() {}),
+                        decoration: const InputDecoration(
+                          labelText: '내용', 
+                          border: OutlineInputBorder(),
+                          alignLabelWithHint: true, // 라벨 텍스트도 맨 위에 고정
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 20),
+                    // 본인 글이거나 신규 등록 모드일 때만 하단 완료 버튼 활성화
+                    if (!isEditMode || isAuthor)
+                      SizedBox(
+                        width: double.infinity,
+                        height: 48,
+                        child: ElevatedButton(
+                          onPressed: isButtonEnabled
+                            ? () {
+                                if (titleController.text.trim().isEmpty || contentController.text.trim().isEmpty) return;
+                                if (isEditMode) {
+                                  _updateLog(log['id'], titleController.text, contentController.text);
+                                } else {
+                                  _addLog(titleController.text, contentController.text);
+                                }
+                                Navigator.pop(context);
+                              }
+                            : null,
+                          style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF166534)),
+                          child: Text(isEditMode ? '수정 완료' : '등록 완료', style: const TextStyle(color: Colors.white)),
+                        ),
+                      ),
+                    const SizedBox(height: 20),
                   ],
                 ),
-                const SizedBox(height: 16),
-                TextField(
-                  controller: titleController,
-                  // enabled: !isEditMode || isAuthor, // 본인 글이 아니면 읽기전용
-                  readOnly: isEditMode && !isAuthor,
-                  decoration: const InputDecoration(labelText: '제목', border: OutlineInputBorder()),
-                ),
-                const SizedBox(height: 12),
-                if (isEditMode) ...[
-                  Text("작성자: ${log['username']}", style: TextStyle(color: Colors.grey[600], fontSize: 13)),
-                  const SizedBox(height: 12),
-                ],
-                Expanded(                  
-                  child: TextField(
-                    controller: contentController,                    
-                    readOnly: isEditMode && !isAuthor,
-                    maxLines: null,
-                    expands: true,
-                    textAlignVertical: TextAlignVertical.top,                    
-                    keyboardType: TextInputType.multiline,
-                    decoration: const InputDecoration(
-                      labelText: '내용', 
-                      border: OutlineInputBorder(),
-                      alignLabelWithHint: true, // 라벨 텍스트도 맨 위에 고정
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 20),
-                // 본인 글이거나 신규 등록 모드일 때만 하단 완료 버튼 활성화
-                if (!isEditMode || isAuthor)
-                  SizedBox(
-                    width: double.infinity,
-                    height: 48,
-                    child: ElevatedButton(
-                      onPressed: () {
-                        if (titleController.text.trim().isEmpty || contentController.text.trim().isEmpty) return;
-                        if (isEditMode) {
-                          _updateLog(log['id'], titleController.text, contentController.text);
-                        } else {
-                          _addLog(titleController.text, contentController.text);
-                        }
-                        Navigator.pop(context);
-                      },
-                      style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF166534)),
-                      child: Text(isEditMode ? '수정 완료' : '등록 완료', style: const TextStyle(color: Colors.white)),
-                    ),
-                  ),
-                const SizedBox(height: 20),
-              ],
-            ),
-          ),
+              ),
+            );
+          }
         );
       },
     );

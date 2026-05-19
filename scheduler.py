@@ -68,8 +68,8 @@ def evening_job():
 # 5. 스케줄러 시작
 seoul_tz = timezone('Asia/Seoul')
 scheduler = BackgroundScheduler(timezone=seoul_tz)
-# 아침 8시: 당일 알람
-scheduler.add_job(morning_job, 'cron', hour=8, minute=0)
+# 아침 9시: 당일 알람
+scheduler.add_job(morning_job, 'cron', hour=9, minute=0)
 # 저녁 8시: 전날 리마인드
 scheduler.add_job(evening_job, 'cron', hour=20, minute=0)
 
