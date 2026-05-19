@@ -631,10 +631,7 @@ async def get_todos():
 @app.post("/api/add_todo")
 async def add_todo(req: TodoAddRequest):
     try:
-        result = db.add_todo(req)
-
-        # TODO: 등록 시 알람 쏘는거 만들어야 함.
-        #       공지 쏘던거랑 같이 쓰면 될 것 같은데 이 부분은 수정이 필요해보임.
+        result = db.add_todo(req)      
 
         if result:
             try:
@@ -1200,3 +1197,65 @@ async def delete_qna(qna_id: int):
     if success:
         return {"success": True}
     raise HTTPException(status_code=400, detail="삭제할 수 없는 상태이거나 권한이 없습니다.")
+
+#------------- 클럽일지 관련 API ------------------
+# added : 26.05.19
+
+# 1. 등록 요청
+class ClubDailylogAddRequest(BaseModel):
+    log_date: str  # YYYY-MM-DD
+    title: str
+    content: str
+    userid: str
+    username: str
+
+# 2. 수정 요청
+class ClubDailylogUpdateRequest(BaseModel):
+    id: int
+    title: str
+    content: str
+
+# 3. 삭제 요청
+class ClubDailylogDeleteRequest(BaseModel):
+    id: int
+
+# ① 일지 등록
+@app.post("/api/add_club_dailylog")
+async def add_club_dailylog(req: ClubDailylogAddRequest):
+    result = db.add_club_dailylog(req)
+    if not result:
+        raise HTTPException(status_code=500, detail="일지 등록 실패")
+    return {"success": True, "message": "성공적으로 등록되었습니다."}
+
+# ② 특정 날짜 일지 조회 (Query Parameter: ?date=2026-05-19)
+@app.get("/api/get_club_dailylogs")
+async def get_club_dailylogs(date: str):
+    logs = db.get_club_dailylog_by_date(date)
+    # 데이터가 없으면 null을 반환하여 플러터에서 대응하기 편하게 처리
+    if logs is not None:
+        return {"success": True, "data": logs} # logs 자체가 이제 리스트([ {}, {}, {} ])로 나갑니다!
+    return {"success": False, "data": []}
+
+# ③ 달력 마커용 날짜 목록 조회 (Query Parameter: ?year=2026&month=05)
+@app.get("/api/get_monthly_markers")
+async def get_monthly_markers(year: str, month: str):
+    # '2026-05' 형태로 조회를 위해 포맷팅
+    year_month = f"{year}-{month.zfill(2)}"  # 한 자리 수 달 대비 (ex: '5' -> '05')
+    markers = db.get_monthly_markers(year_month)
+    return {"success": True, "markers": markers}
+
+# ④ 일지 수정
+@app.post("/api/update_club_dailylog")
+async def update_club_dailylog(req: ClubDailylogUpdateRequest):
+    result = db.update_club_dailylog(req)
+    if not result:
+        raise HTTPException(status_code=500, detail="일지 수정 실패")
+    return {"success": True, "message": "성공적으로 수정되었습니다."}
+
+# ⑤ 일지 삭제
+@app.post("/api/delete_club_dailylog")
+async def delete_club_dailylog(req: ClubDailylogDeleteRequest):
+    result = db.delete_club_dailylog(req)
+    if not result:
+        raise HTTPException(status_code=500, detail="일지 삭제 실패")
+    return {"success": True, "message": "성공적으로 삭제되었습니다."}

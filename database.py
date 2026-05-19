@@ -186,6 +186,21 @@ def init_db():
             )
         """)
 
+        # 11. 클럽 일지 테이블 생성
+        c.execute("""
+            CREATE TABLE IF NOT EXISTS club_dailylogs (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                log_date TEXT NOT NULL,
+                title TEXT NOT NULL,
+                content TEXT NOT NULL,
+                userid TEXT NOT NULL,
+                username TEXT NOT NULL,
+                create_at DATETIME DEFAULT (datetime('now', 'localtime'))
+            )
+        """)
+
+        c.execute('CREATE INDEX IF NOT EXISTS idx_log_date ON club_dailylogs (log_date)')
+
         # [Admin] 최초 관리자 계정 생성 (없을 때만)
         c.execute("SELECT * FROM users WHERE role = 'Admin'")
         if not c.fetchone():
@@ -1241,3 +1256,91 @@ def update_user_token(p):
         except Exception as e:
             print(f"토큰 업데이트 에러: {e}")
             return False        
+        
+
+#----------------- 클럽일지 CRUD ------------------------
+# added : 26.05.19
+
+# ① 일지 등록
+def add_club_dailylog(p):
+    with get_connection() as conn:
+        try:
+            c = conn.cursor()
+            c.execute("""
+                INSERT INTO club_dailylogs (log_date, title, content, userid, username)
+                VALUES (?, ?, ?, ?, ?)
+            """, (p.log_date, p.title, p.content, p.userid, p.username))
+            conn.commit()
+            return True
+        except Exception as e:
+            conn.rollback()
+            print(f"❌ 일지 저장 실패: {e}")
+            return False
+
+# ② 특정 날짜 일지 조회
+def get_club_dailylog_by_date(date: str):
+    with get_connection() as conn:
+        try:            
+            # 딕셔너리 형태로 리턴받기 위해 Row Factory 설정 (기존 세팅이 있다면 생략 가능)
+            conn.row_factory = lambda cursor, row: {
+                col[0]: row[idx] for idx, col in enumerate(cursor.description)
+            }
+            c = conn.cursor()
+            
+            c.execute("""
+                SELECT id, log_date, title, content, userid, username, create_at 
+                FROM club_dailylogs 
+                WHERE log_date = ?
+            """, (date,))
+            return c.fetchall() 
+        except Exception as e:
+            print(f"❌ 일지 날짜별 조회 실패: {e}")
+            return None
+
+# ③ 달력 마커용 해당 월의 날짜 목록 조회
+def get_monthly_markers(year_month: str):
+    with get_connection() as conn:
+        try:
+            c = conn.cursor()
+            # LIKE '2026-05%' 구문으로 해당 월에 작성된 날짜를 중복 없이(DISTINCT) 긁어옵니다.
+            c.execute("""
+                SELECT DISTINCT log_date 
+                FROM club_dailylogs 
+                WHERE log_date LIKE ?
+            """, (f"{year_month}%",))
+            
+            # 결과 예시: [('2026-05-10',), ('2026-05-12',)] -> ['2026-05-10', '2026-05-12'] 형태의 단순 리스트로 추출
+            return [row[0] for row in c.fetchall()]
+        except Exception as e:
+            print(f"❌ 월별 마커 조회 실패: {e}")
+            return []
+
+# ④ 일지 수정
+def update_club_dailylog(p):
+    with get_connection() as conn:
+        try:
+            c = conn.cursor()
+            c.execute("""
+                UPDATE club_dailylogs 
+                SET title = ?, content = ?
+                WHERE id = ?
+            """, (p.title, p.content, p.id))
+            conn.commit()
+            return True
+        except Exception as e:
+            conn.rollback()
+            print(f"❌ 일지 수정 실패: {e}")
+            return False
+
+# ⑤ 일지 삭제
+def delete_club_dailylog(p):
+    with get_connection() as conn:
+        try:
+            c = conn.cursor()
+            c.execute("DELETE FROM club_dailylogs WHERE id = ?", (p.id,))
+            conn.commit()
+            return True
+        except Exception as e:
+            conn.rollback()
+            print(f"❌ 일지 삭제 실패: {e}")
+            return False

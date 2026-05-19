@@ -16,7 +16,11 @@ dependencies:
   flutter_svg: ^2.2.4
   http: ^1.2.0
 
-  # Syncfusion 버전을 최신으로 끌어올립니다 (intl 0.20.2 지원 버전)
+  # 클럽일지에서 사용하는 달력
+  table_calendar: ^3.1.2
+
+  # Syncfusion 버전을 최신으로 끌어올립니다 (intl 0.20.2 지원 버전) 
+  # 일정관리에서 사용하는 달력
   syncfusion_flutter_calendar: ^28.1.38
   syncfusion_localizations: ^28.1.38
 

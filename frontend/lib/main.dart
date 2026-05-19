@@ -25,6 +25,7 @@ import 'screens/mng_equipment_screen.dart';
 import 'screens/data_migration_screen.dart';
 import 'screens/mng_payment_screen.dart';
 import 'screens/qna_screen.dart';
+import 'screens/club_dailylog_screen.dart';
 import 'constants.dart';
 import 'firebase_options.dart';
 import 'config/app_config.dart';
@@ -702,6 +703,7 @@ class MainDashboard extends StatelessWidget {
       {'title': '공지사항', 'icon': Icons.campaign, 'colors': [Colors.orange, Colors.deepOrangeAccent]},
       {'title': '클럽 일정', 'icon': Icons.calendar_month, 'colors': [Colors.blue, Colors.lightBlueAccent]},
       {'title': 'To-do List', 'icon': Icons.task_alt, 'colors': [Colors.green, Colors.lightGreenAccent]},
+      {'title': '클럽 일지', 'icon' : Icons.assignment, 'colors': [Colors.cyan[700]!, Colors.cyanAccent]},
       {'title': '회원 관리', 'icon': Icons.groups, 'colors': [Colors.indigo, Colors.indigoAccent]},
       {'title': '결제 관리', 'icon': Icons.payments, 'colors': [Colors.teal, Colors.tealAccent]},
       {'title': '장비 관리', 'icon': Icons.handyman, 'colors': [Colors.brown, Colors.orangeAccent]},
@@ -799,6 +801,14 @@ class MainDashboard extends StatelessWidget {
                               context,
                               MaterialPageRoute(
                                 builder: (context) => TodoPage(userName: userName),
+                              ),
+                            ); 
+                          }
+                          else if (title == '클럽 일지') {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) => ClubDailylogScreen(userRole: userRole, userId: userId, userName: userName),
                               ),
                             ); 
                           }

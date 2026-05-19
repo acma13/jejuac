@@ -7,13 +7,13 @@ class Config {
   // static const String baseUrl = "http://10.0.2.2:8000"; 
 
   // 로컬호스트용 (웹)
-  //static const String baseUrl = "http://localhost:5000";
+  static const String baseUrl = "http://localhost:5000";
   
   // 🏹 나중에 실제 서버에 올렸을 때 (배포용)
   // static const String baseUrl = "http://158.180.89.23:5000";
 
   // 실제 서버는 이것으로 사용 할 것!!!
-  static const String baseUrl = "https://jejuac.duckdns.org/api";
+  // static const String baseUrl = "https://jejuac.duckdns.org/api";
 
   // 사용자 등록 및 로그인 관련
   static const String invitedEmails = "$baseUrl/api/invited-emails";
@@ -85,4 +85,11 @@ class Config {
   static const String answerQna = "$baseUrl/api/answer_qna";
   static const String deleteQna = "$baseUrl/api/delete_qna";
   static const String updateQna = "$baseUrl/api/update_qna";
+
+  // 클럽 일지 관련
+  static const String addClubDailylog = "$baseUrl/api/add_club_dailylog";
+  static const String getClubDailylogs = "$baseUrl/api/get_club_dailylogs";
+  static const String getMonthlyMarkers = "$baseUrl/api/get_monthly_markers";
+  static const String updateClubDailylog = "$baseUrl/api/update_club_dailylog";
+  static const String deleteClubDailylog = "$baseUrl/api/delete_club_dailylog";
 }
