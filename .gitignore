@@ -17,3 +17,7 @@ __pycache__/
 
 # 4. Environment Variables (API 키, 비밀번호 등)
 .env
+
+# 5. 실행 파일
+*.sh
+*.ps1

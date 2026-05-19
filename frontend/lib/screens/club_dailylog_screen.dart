@@ -335,9 +335,8 @@ class _ClubDailylogScreenState extends State<ClubDailylogScreen> {
                     if (isEditMode && (isAuthor || isAdmin))
                       IconButton(
                         icon: const Icon(Icons.delete, color: Colors.red),
-                        onPressed: () {
-                          _deleteLog(log['id']);
-                          Navigator.pop(context);
+                        onPressed: () {                          
+                          _showDeleteConfirmDialog(context, log['id']);
                         },
                       )
                   ],
@@ -393,6 +392,34 @@ class _ClubDailylogScreenState extends State<ClubDailylogScreen> {
               ],
             ),
           ),
+        );
+      },
+    );
+  }
+
+  // 삭제 확인 다이얼로그.
+  void _showDeleteConfirmDialog(BuildContext context, int eventId) {
+    showDialog(
+      context: context,
+      builder: (BuildContext dialogContext) {
+        return AlertDialog(
+          title: const Text("일지 삭제"),
+          content: const Text("정말 이 클럽 일지를 삭제하시겠습니까?\n삭제된 데이터는 복구할 수 없습니다."),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext), // 취소
+              child: const Text("취소", style: TextStyle(color: Colors.grey)),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+              onPressed: () async {
+                Navigator.pop(dialogContext); // 다이얼로그 닫기
+                Navigator.pop(context);
+                await _deleteLog(eventId); // 🏹 실제 삭제 API 호출
+              },
+              child: const Text("삭제", style: TextStyle(color: Colors.white)),
+            ),
+          ],
         );
       },
     );
