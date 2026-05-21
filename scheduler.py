@@ -16,13 +16,17 @@ initialize_firebase()
 def send_fcm_notification(title, body):
     try:        
         message = messaging.Message(
-            data={'title': title, 'body': body},
+            data={
+                'title': title,
+                'body': body,
+                'tag': 'jejuac-event-alarm' # 공지 알림과 구분되는 태그
+                },
             webpush=messaging.WebpushConfig(
                 notification=messaging.WebpushNotification(
-                    title=title,
-                    body=body,
-                    icon="/icons/bow-and-arrow.png",
-                    tag="jejuac-event-alarm" # 공지 알림과 구분되는 태그
+                    # title=title,
+                    # body=body,
+                    icon="/icons/bow-and-arrow.png"
+                    # tag="jejuac-event-alarm" # 공지 알림과 구분되는 태그
                 ),
             ),
             topic=FCM_TOPIC_NAME
