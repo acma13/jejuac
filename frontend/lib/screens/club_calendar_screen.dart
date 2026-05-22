@@ -477,8 +477,8 @@ class _ClubCalendarScreenState extends State<ClubCalendarScreen> {
                             "manager": managerController.text,
                             "location": locationController.text,
                             "content": contentController.text,
-                            "start_date": startDate.toIso8601String(),
-                            "end_date": endDate.toIso8601String(),
+                            "start_date": startDate.toIso8601String().split('T')[0],
+                            "end_date": endDate.toIso8601String().split('T')[0],
                             "color": selectedColor.toARGB32(), 
                             "use_alarm": useAlarm ? 1 : 0,
                           };

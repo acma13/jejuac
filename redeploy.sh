@@ -36,13 +36,20 @@ deploy_frontend() {
 
         echo "🧹 web.zip을 제외한 기존 구버전 파일들을 깔끔하게 삭제합니다..."
         # web.zip만 남기고 나머지 파일/폴더 싹 제거
-        find . -maxdepth 1 ! -name 'web.zip' ! -name '.' -exec rm -rf {} +
+        find . -maxdepth 1 ! -name 'web.zip' ! -name '.' -exec sudo rm -rf {} +
 
         echo "📦 최신 web.zip 압축을 해제합니다..."
-        unzip web.zip > /dev/null
+        sudo unzip -o web.zip > /dev/null
+
+        echo "🔐 웹 서버가 에셋을 읽을 수 있도록 파일 권한을 자동으로 최적화합니다..."
+        sudo find . -type d -exec chmod 755 {} +
+        sudo find . -type f -exec chmod 644 {} +
         
         echo "🧹 작업이 끝난 web.zip 파일을 서버에서 삭제합니다..."
-        rm -f web.zip
+        sudo rm -f web.zip
+
+        # 압축이 어떤 권한으로 풀렸든 간에, 소유자를 다시 무조건 ubuntu로 강제 환원합니다.
+        sudo chown -R ubuntu:ubuntu .
 
         cd ~
         echo -e "${GREEN}========== 🎉 프론트엔드 웹 배포 완료! ==========${NC}"

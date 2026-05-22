@@ -7,7 +7,7 @@ class Config {
   // static const String baseUrl = "http://10.0.2.2:8000"; 
 
   // 로컬호스트용 (웹)
-  //static const String baseUrl = "http://localhost:5000";
+  // static const String baseUrl = "http://localhost:5000";
   
   // 🏹 나중에 실제 서버에 올렸을 때 (배포용)
   // static const String baseUrl = "http://158.180.89.23:5000";
