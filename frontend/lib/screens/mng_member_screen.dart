@@ -527,11 +527,21 @@ class _MngMemberScreenState extends State<MngMemberScreen> {
       itemBuilder: (context, index) {
         final p = payments[index];
         final bool isPaid = p['is_paid'] == 1 || p['is_paid'] == true;
+
+        // 1. 먼저 표시할 글자 변수를 깔끔하게 가공해 둡니다.
+        final String payItem = p['pay_item'] ?? "";
+        final String targetMonth = p['target_month'] ?? "";
+        
+        // 2. 조건문 확인: 만약 pay_item이 "수업료"이고 target_month 데이터가 있다면 뒤에 결합!
+        // 예: "수업료 (5월)" 또는 "수업료 5월분" 이런 식으로 영님 스타일에 맞게 문구를 맞추시면 됩니다.
+        final String displayTitle = (payItem == "수업료" && targetMonth.isNotEmpty)
+            ? "$payItem ($targetMonth)"  // 💡 수업료일 때 출력 형태 (예: 수업료 (5월))
+            : payItem;                   // 💡 수업료가 아닐 때는 기존처럼 출력
         return ListTile(
           contentPadding: EdgeInsets.zero,
           leading: Icon(isPaid ? Icons.check_circle : Icons.error_outline, 
                       color: isPaid ? Colors.green : Colors.red),
-          title: Text(p['pay_item'] ?? ""),
+          title: Text(displayTitle),
           trailing: Text(_formatter.format(p['amount'] ?? 0)),
         );
       },
