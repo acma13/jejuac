@@ -56,8 +56,11 @@ class _MngMemberScreenState extends State<MngMemberScreen> {
   // 3. 필터링 로직: 화면에 보여줄 리스트를 실시간으로 계산
   List<Map<String, dynamic>> get _filteredMembers {
     return members.where((m) {
-      final nameMatch = m['name'].contains(searchQuery) || m['phone'].contains(searchQuery);
-      final classMatch = (selectedClass == "전체") || (m['class'] == selectedClass); 
+      final String memberName = m['name'] ?? "";
+      final String memberPhone = m['phone'] ?? "";
+
+      final nameMatch = memberName.contains(searchQuery) || memberPhone.contains(searchQuery);
+      final classMatch = (selectedClass == "전체") || (m['class'] == selectedClass);
 
       bool statusMatch = true;
       if (selectedStatus == "활동중") statusMatch = (m['isActive'] == true);
@@ -295,7 +298,18 @@ class _MngMemberScreenState extends State<MngMemberScreen> {
                             color: WidgetStateProperty.all(index % 2 == 0 ? Colors.white : Colors.green.withValues(alpha: 0.05)),
                             cells: [
                               DataCell(Text(member['name'] ?? "이름 없음", style: const TextStyle(fontWeight: FontWeight.bold))),
-                              DataCell(Text(member['phone'] ?? "연락처 없음")),
+                              DataCell(
+                                Text(
+                                  (member['phone'] == null || member['phone'].toString().trim().isEmpty)
+                                      ? "연락처 없음"
+                                      : member['phone'],
+                                  style: TextStyle(
+                                    color: (member['phone'] == null || member['phone'].toString().trim().isEmpty)
+                                        ? Colors.red[300] // 💡 연락처가 없으면 흐린 빨간색으로 포인트를 주면 더 직관적입니다!
+                                        : Colors.black87,
+                                  ),
+                                ),
+                              ),
                               DataCell(
                                 Container(
                                   padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
@@ -354,16 +368,18 @@ class _MngMemberScreenState extends State<MngMemberScreen> {
   // 회원 상세 보기 (수정/삭제)
   void _showMemberDetail(Map<String, dynamic> member) {
     // 결제 내역을 저장할 변수와 로딩 상태
-    List<dynamic>? cachedPayments;
+    List<dynamic>? cachedPayments; 
+
+    // 기존 데이터를 컨트롤러에 미리 채워넣습니다.
+    final nameController = TextEditingController(text: member['name']);
+    final phoneController = TextEditingController(text: member['phone']);
+    final birthController = TextEditingController(text: member['birth']);
 
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       builder: (context) {
-        // 기존 데이터를 컨트롤러에 미리 채워넣습니다.
-        final nameController = TextEditingController(text: member['name']);
-        final phoneController = TextEditingController(text: member['phone']);
-        final birthController = TextEditingController(text: member['birth']);
+        
         String tempClass = member['class'] ?? '취미반';
         bool tempIsActive = (member['is_active'] == 1 || member['is_active'] == true);
 
@@ -461,7 +477,7 @@ class _MngMemberScreenState extends State<MngMemberScreen> {
                       // 수정 완료 버튼
                       Expanded(
                         child: ElevatedButton(
-                          onPressed: () {
+                          onPressed: () {                            
                             final Map<String, dynamic> updateData = {
                               "id": member['id'],           // 어떤 회원을 수정할지 ID는 필수!
                               "name": nameController.text,
@@ -492,7 +508,7 @@ class _MngMemberScreenState extends State<MngMemberScreen> {
   Widget _buildEditField(TextEditingController controller, String label, IconData icon, {List<TextInputFormatter>? formatters}) {
     return TextField(
       controller: controller,
-      inputFormatters: formatters,
+      inputFormatters: formatters,      
       decoration: InputDecoration(
         labelText: label,
         border: const OutlineInputBorder(),

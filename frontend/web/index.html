@@ -1,16 +1,16 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html>
 <head>
   <base href="$FLUTTER_BASE_HREF">
 
   <meta charset="UTF-8">
   <meta content="IE=Edge" http-equiv="X-UA-Compatible">
-  <meta name="description" content="제주양궁클럽">
+  <meta name="description" content="?쒖＜?묎턿?대읇">
 
   <link rel="apple-touch-icon" href="icons/bow-and-arrow.png">
   <link rel="icon" type="image/png" href="favicon.png"/>
 
-  <title>제주양궁클럽</title>
+  <title>?쒖＜?묎턿?대읇</title>
   <link rel="manifest" href="manifest.json">
 
   <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
@@ -26,18 +26,19 @@
     }
   </script>
   
-  <script src="flutter_bootstrap.js" async></script>
+<!-- <script src="flutter_bootstrap.js" async></script> -->
+  <script src="flutter_bootstrap.js?v=20260604092431" async></script>
 
   <script>
-    // 2. 플러터 엔진이 로드되었을 때 서비스 워커를 우리 파일로 바꿔치기합니다.
+    // 2. ?뚮윭???붿쭊??濡쒕뱶?섏뿀?????쒕퉬???뚯빱瑜??곕━ ?뚯씪濡?諛붽퓭移섍린?⑸땲??
     window.addEventListener("flutter-first-frame", function() {
-      console.log("✅ 플러터 첫 프레임 로드 완료");
+      console.log("???뚮윭??泥??꾨젅??濡쒕뱶 ?꾨즺");
     });
 
-    // 플러터 부트스트랩 과정에서 커스텀 설정을 주입하는 최신 표준 방식
+    // ?뚮윭??遺?몄뒪?몃옪 怨쇱젙?먯꽌 而ㅼ뒪? ?ㅼ젙??二쇱엯?섎뒗 理쒖떊 ?쒖? 諛⑹떇
     if (typeof _flutter === 'undefined') {
       window.addEventListener('flutter-initialized', function (event) {
-        // 이미 초기화된 경우 처리
+        // ?대? 珥덇린?붾맂 寃쎌슦 泥섎━
       });
     }
   </script>
@@ -52,12 +53,12 @@
   <base href="$FLUTTER_BASE_HREF"> 
   <meta charset="UTF-8">
   <meta content="IE=Edge" http-equiv="X-UA-Compatible">
-  <meta name="description" content="제주양궁클럽">
+  <meta name="description" content="?쒖＜?묎턿?대읇">
 
   <link rel="apple-touch-icon" href="icons/bow-and-arrow.png">
   <link rel="icon" type="image/png" href="favicon.png"/>
 
-  <title>제주양궁클럽</title>
+  <title>?쒖＜?묎턿?대읇</title>
   <link rel="manifest" href="manifest.json">
 
   <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
@@ -66,10 +67,10 @@
 <body>
   
   <script>
-    // 2. 플러터의 기본 로직을 커스텀하여 'firebase-messaging-sw.js'만 사용하도록 강제합니다.
+    // 2. ?뚮윭?곗쓽 湲곕낯 濡쒖쭅??而ㅼ뒪??섏뿬 'firebase-messaging-sw.js'留??ъ슜?섎룄濡?媛뺤젣?⑸땲??
     window.flutterConfiguration = {
       serviceWorker: {
-        serviceWorkerUrl: './firebase-messaging-sw.js', // 👈 플러터 워커 대신 우리 파일을 쓰게 합니다.
+        serviceWorkerUrl: './firebase-messaging-sw.js', // ?몚 ?뚮윭???뚯빱 ????곕━ ?뚯씪???곌쾶 ?⑸땲??
         timeoutMillis: 4000,
       }
     };

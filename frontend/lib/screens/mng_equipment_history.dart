@@ -91,9 +91,12 @@ class _MngEquipmentHistoryScreenState extends State<MngEquipmentHistoryScreen> {
       final Map<String, dynamic> tradeData = {
         "equipment_id": widget.equipment.id,
         "member_id": _selectedMember?.id,      // 선택된 회원 ID
-        "trade_type": _selectedType,           // '입고' 또는 '출고'
-        "quantity": int.parse(_qtyController.text),
-        "unit_price": int.parse(_priceController.text.replaceAll(',', '')),
+        "trade_type": _selectedType,           // '입고' 또는 '출고'        
+        // Modify : 26.6.4
+        // M-260602-01
+        // 빈칸으로 두고 저장 했을 시 FormatException 뜨는거 방지
+        "quantity": int.tryParse(_qtyController.text.replaceAll(',', '')) ?? 0,
+        "unit_price": int.tryParse(_priceController.text.replaceAll(',', '')) ?? 0,
         "total_price": _totalAmount,
         "note": _noteController.text,
         "processed_by": widget.userName,   
@@ -213,6 +216,11 @@ class _MngEquipmentHistoryScreenState extends State<MngEquipmentHistoryScreen> {
       int price = int.tryParse(_priceController.text.replaceAll(',', '')) ?? 0;
       int effectiveStock = _currentStock ?? widget.equipment.stock;
 
+      // Modify : 26.6.4
+      // M-260602-01
+      // 단가 입력창이 빈칸인지 아닌지 체크. 아래 switch 항목에 조건 추가함.
+      bool isPriceNotEmpty = _priceController.text.trim().isNotEmpty;
+
       // 공통: 1개 이상 입력
       bool basicOk = qty >= 1;
       bool specificOk = false;
@@ -220,11 +228,11 @@ class _MngEquipmentHistoryScreenState extends State<MngEquipmentHistoryScreen> {
       switch (_selectedType) {
         case "입고":
           // 1. 수량, 단가(0원 이상) 모두 입력
-          specificOk = price >= 0; 
+          specificOk = isPriceNotEmpty && price >= 0; 
           break;
         case "출고":
           // 2. 대상 선택 + 수량 + 단가 + 재고 이내
-          specificOk = _selectedMember != null && price >= 0 && qty <= effectiveStock;
+          specificOk = _selectedMember != null && isPriceNotEmpty && price >= 0 && qty <= effectiveStock;
           break;
         case "입고취소":
           // 3. 수량 + 단가(0원 고정) + 취소가능 수량 이내
