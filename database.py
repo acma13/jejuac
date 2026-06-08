@@ -201,6 +201,22 @@ def init_db():
 
         c.execute('CREATE INDEX IF NOT EXISTS idx_log_date ON club_dailylogs (log_date)')
 
+        # 12. 클럽 일지 댓글 테이블 생성
+        c.execute("""
+            CREATE TABLE IF NOT EXISTS club_comments (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                log_id INTEGER NOT NULL,          -- 어떤 일지에 달린 댓글인지 (Foreign Key)
+                userid TEXT NOT NULL,             -- 작성자 ID
+                username TEXT NOT NULL,           -- 작성자 이름
+                content TEXT NOT NULL,            -- 댓글 내용
+                create_at DATETIME DEFAULT (datetime('now', 'localtime')),
+                FOREIGN KEY (log_id) REFERENCES club_dailylogs (id) ON DELETE CASCADE
+            )
+        """)
+
+        # 💡 댓글 조회 속도를 위한 인덱스 (특정 일지의 댓글만 빠르게 가져올 때 필수)
+        c.execute('CREATE INDEX IF NOT EXISTS idx_log_id ON club_comments (log_id)')
+
         # [Admin] 최초 관리자 계정 생성 (없을 때만)
         c.execute("SELECT * FROM users WHERE role = 'Admin'")
         if not c.fetchone():
@@ -1287,10 +1303,23 @@ def get_club_dailylog_by_date(date: str):
             }
             c = conn.cursor()
             
+            # moidfy : 26.06.08
+            # 댓글 갯수도 확인할 수 있도록 수정.
+            # c.execute("""
+            #     SELECT id, log_date, title, content, userid, username, create_at 
+            #     FROM club_dailylogs 
+            #     WHERE log_date = ?
+            # """, (date,))
+
             c.execute("""
-                SELECT id, log_date, title, content, userid, username, create_at 
-                FROM club_dailylogs 
-                WHERE log_date = ?
+                SELECT 
+                    l.id, l.log_date, l.title, l.content, l.userid, l.username, l.create_at,
+                    COUNT(c.id) as comment_count
+                FROM club_dailylogs l
+                LEFT JOIN club_comments c ON l.id = c.log_id
+                WHERE l.log_date = ?
+                GROUP BY l.id
+                ORDER BY l.create_at DESC
             """, (date,))
             return c.fetchall() 
         except Exception as e:
@@ -1344,3 +1373,77 @@ def delete_club_dailylog(p):
             conn.rollback()
             print(f"❌ 일지 삭제 실패: {e}")
             return False
+        
+#----------------- 클럽일지 댓글 관련 CRUD ------------------------
+# added : 26.06.08
+
+# 본문 + 댓글 통합 조회 쿼리
+def get_log_and_comments_from_db(log_id: int):
+    with get_connection() as conn:
+        # 💡 만약 기존 get_connection() 내부에서 row_factory 설정을 안 해줬다면 여기서 활성화해 줍니다.
+        # conn.row_factory = sqlite3.Row 
+        
+        c = conn.cursor()
+        
+        # 1-1. 일지 본문 먼저 조회
+        c.execute("SELECT * FROM club_dailylogs WHERE id = ?", (log_id,))
+        log_row = c.fetchone()
+
+        if not log_row:
+            return None # 일지가 없으면 None 반환
+        
+        log_data = dict(log_row)
+
+        # 1-2. 해당 일지에 달린 댓글들을 시간순(오름차순)으로 조회
+        c.execute("SELECT * FROM club_comments WHERE log_id = ? ORDER BY create_at ASC", (log_id,))
+        comments_rows = c.fetchall()
+        
+        # 1-3. 본문 딕셔너리 안에 'comments' 키로 댓글 리스트 병합
+        log_data['comments'] = [dict(row) for row in comments_rows]
+
+        return log_data
+
+
+# 새 댓글 추가
+def add_log_comment_to_db(p):
+    try:
+        with get_connection() as conn:
+            c = conn.cursor()
+            c.execute("""
+                INSERT INTO club_comments (log_id, userid, username, content)
+                VALUES (?, ?, ?, ?)
+            """, (p.log_id, p.userid, p.username, p.content))
+            
+            conn.commit() # 트랜잭션 반영
+            return True
+    except Exception as e:
+        print(f"댓글 DB 저장 에러: {e}")
+        return False
+    
+# 댓글 수정
+def modify_log_comment_to_db(p):
+    try:
+        with get_connection() as conn:
+            c = conn.cursor()
+            c.execute("""
+                UPDATE club_comments 
+                SET content = ? 
+                WHERE id = ?
+            """, (p.content, p.id))
+            conn.commit()
+            return True
+    except Exception as e:
+        print(f"❌ 댓글 수정 DB 반영 에러: {e}")
+        return False
+
+# 댓글 삭제 (Hard Delete)
+def delete_log_comment_from_db(p):
+    try:
+        with get_connection() as conn:
+            c = conn.cursor()
+            c.execute("DELETE FROM club_comments WHERE id = ?", (p.id,))
+            conn.commit()
+            return True
+    except Exception as e:
+        print(f"❌ 댓글 삭제 DB 반영 에러: {e}")
+        return False

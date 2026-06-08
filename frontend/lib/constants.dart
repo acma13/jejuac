@@ -92,4 +92,10 @@ class Config {
   static const String getMonthlyMarkers = "$baseUrl/api/get_monthly_markers";
   static const String updateClubDailylog = "$baseUrl/api/update_club_dailylog";
   static const String deleteClubDailylog = "$baseUrl/api/delete_club_dailylog";
+  // 클럽 일지 댓글 관련
+  static const String getLogAndComments = "$baseUrl/api/get_log_and_comments";
+  static const String addLogComment = "$baseUrl/api/add_log_Comment";
+  static const String modifyLogComment = "$baseUrl/api/modify_log_comment";
+  static const String deleteLogComment = "$baseUrl/api/delete_log_comment";
+
 }

@@ -1259,3 +1259,67 @@ async def delete_club_dailylog(req: ClubDailylogDeleteRequest):
     if not result:
         raise HTTPException(status_code=500, detail="일지 삭제 실패")
     return {"success": True, "message": "성공적으로 삭제되었습니다."}
+
+# --------------------------------------------
+# added : 26.06.08
+# 클럽 일지의 댓글 기능 추가
+# --------------------------------------------
+
+# 댓글 등록용 모델
+class CommentModel(BaseModel):
+    log_id: int
+    userid: str
+    username: str
+    content: str
+
+# 댓글 수정용 모델
+class ModifyCommentReq(BaseModel):
+    id: int
+    content: str
+
+# 댓글 삭제용 모델
+class DeleteCommentReq(BaseModel):
+    id: int
+
+# 🔄 1. 본문 + 댓글 통합 조회 API (GET)
+# URL: /api/get_log_and_comments?log_id=12 형태로 호출됨
+@app.get("/api/get_log_and_comments")
+def get_log_and_comments(log_id: int):
+    # database.py의 통합 조회 함수 호출
+    result = db.get_log_and_comments_from_db(log_id)
+    
+    if result is None:
+        raise HTTPException(status_code=404, detail="일지를 찾을 수 없습니다.")
+    
+    # 딕셔너리를 리턴하면 FastAPI가 알아서 깔끔한 JSON으로 변환해 줍니다.
+    return result
+
+# 📝 2. 새 댓글 등록 API (POST)
+# URL: /api/add_log_Comment (C 대문자 일치)
+@app.post("/api/add_log_Comment")
+def add_log_comment(req: CommentModel):
+    # database.py의 댓글 추가 함수 호출
+    success = db.add_log_comment_to_db(req)
+    
+    if success:
+        return {"status": "success", "message": "댓글이 성공적으로 등록되었습니다."}
+    else:
+        raise HTTPException(status_code=500, detail="댓글 등록 중 오류가 발생했습니다.")
+    
+# 🔄 3. 댓글 수정 API (POST)
+@app.post("/api/modify_log_comment")
+def modify_log_comment(req: ModifyCommentReq):
+    success = db.modify_log_comment_to_db(req)
+    if success:
+        return {"status": "success", "message": "댓글이 수정되었습니다."}
+    else:
+        raise HTTPException(status_code=500, detail="댓글 수정 중 오류가 발생했습니다.")
+
+# ❌ 4. 댓글 삭제 API (POST)
+@app.post("/api/delete_log_comment")
+def delete_log_comment(req: DeleteCommentReq):
+    success = db.delete_log_comment_from_db(req)
+    if success:
+        return {"status": "success", "message": "댓글이 삭제되었습니다."}
+    else:
+        raise HTTPException(status_code=500, detail="댓글 삭제 중 오류가 발생했습니다.")

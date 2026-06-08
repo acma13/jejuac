@@ -4,6 +4,7 @@ import '/constants.dart';
 import 'dart:convert'; // jsonEncode 쓰기 위해 필요.
 import 'package:http/http.dart' as http; // http.post 를 쓰기 위해 필요.
 import 'package:table_calendar/table_calendar.dart';
+import 'club_log_detail_screen.dart';
 
 class ClubDailylogScreen extends StatefulWidget {
   final String userRole;
@@ -295,7 +296,7 @@ class _ClubDailylogScreenState extends State<ClubDailylogScreen> {
   }
 
   // 등록 / 상세 / 수정 / 삭제 통합 처리 바텀시트
-  void _openLogBottomSheet({Map<String, dynamic>? log}) {
+  Future<void> _openLogBottomSheet({Map<String, dynamic>? log}) async {
     final bool isEditMode = log != null;
     final TextEditingController titleController = TextEditingController(text: isEditMode ? log['title'] : '');
     final TextEditingController contentController = TextEditingController(text: isEditMode ? log['content'] : '');
@@ -306,7 +307,7 @@ class _ClubDailylogScreenState extends State<ClubDailylogScreen> {
     final bool isAuthor = isEditMode && (log['userid'] == widget.userId);
     final bool isAdmin = widget.userRole == 'Admin';
 
-    showModalBottomSheet(
+    return showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(16))),
@@ -413,7 +414,7 @@ class _ClubDailylogScreenState extends State<ClubDailylogScreen> {
       builder: (BuildContext dialogContext) {
         return AlertDialog(
           title: const Text("일지 삭제"),
-          content: const Text("정말 이 클럽 일지를 삭제하시겠습니까?\n삭제된 데이터는 복구할 수 없습니다."),
+          content: const Text("정말 이 클럽 일지를 삭제하시겠습니까?\n댓글도 전부 삭제됩니다.\n삭제된 데이터는 복구할 수 없습니다."),
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(dialogContext), // 취소
@@ -528,9 +529,55 @@ class _ClubDailylogScreenState extends State<ClubDailylogScreen> {
                             padding: const EdgeInsets.only(top: 6.0),
                             child: Text("작성자: ${log['username']}", style: TextStyle(color: Colors.grey[600], fontSize: 13)),
                           ),
-                          trailing: const Icon(Icons.arrow_forward_ios, size: 14, color: Colors.grey),
+                          // modify: 26.06.08
+                          // 댓글 갯수 표시
+                          //trailing: const Icon(Icons.arrow_forward_ios, size: 14, color: Colors.grey),
+                          trailing: Row(
+                            mainAxisSize: MainAxisSize.min, // 중요: Row가 오른쪽 공간을 다 차지하지 않도록 최소 크기로 설정
+                            children: [
+                              const Icon(Icons.chat_bubble_outline, size: 16, color: Colors.grey), // 말풍선 아이콘
+                              const SizedBox(width: 4),
+                              Text(
+                                // 💡 파이썬 DB에서 넘어온 comment_count가 없으면 0으로 처리
+                                '${log['comment_count'] ?? 0}', 
+                                style: TextStyle(
+                                  fontSize: 13, 
+                                  fontWeight: FontWeight.bold,
+                                  color: (log['comment_count'] ?? 0) > 0 ? const Color(0xFF166534) : Colors.grey[600], // 댓글 있으면 초록색 강조
+                                ),
+                              ),
+                            ],
+                          ),
+                          /* -------------------------------
+                          modify: 26.06.08
+                          댓글 기능 추가를 위해 바텀시트가 아닌 전체화면으로 띄우게 하고
+                          원 글 수정시에는 부모 화면의 바텀 시트를 사용하도록 함.
+                          ------------------------------- */
                           // 카드를 탭하면 상세 조회 및 권한별 수정/삭제 분기 바텀시트 열림
-                          onTap: () => _openLogBottomSheet(log: log),
+                          // onTap: () => _openLogBottomSheet(log: log),
+                          onTap: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) => ClubLogDetailScreen(
+                                  logId: log['id'],
+                                  userId: widget.userId,
+                                  userName: widget.userName,
+                                  userRole: widget.userRole,
+
+                                  // ✨ [핵심 추가] 부모창의 바텀시트를 상세창의 context 위로 띄우도록 함수를 매핑해서 던집니다.
+                                  onEditRequested: (BuildContext detailContext, Map<String, dynamic> currentLog) {
+                                    return _openLogBottomSheet(log: currentLog); 
+                                  },
+                                ),
+                              ),
+                            ).then((_) {
+                              // 💡 상세화면에서 댓글 달고 메인으로 돌아왔을 때, 
+                              // 메인 화면 일지 카드의 댓글 수도 갱신되게 하고 싶다면 여기에 조회 함수 호출!
+                              // 예: _fetchDayLogs(); 
+                              _refreshData();
+                            });
+                          },
                         ),
                       );
                     },
