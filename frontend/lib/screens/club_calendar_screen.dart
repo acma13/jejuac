@@ -1,3 +1,8 @@
+/*
+Modify : 26.06.09
+내용 : 시간설정 기능 추가
+*/
+
 import 'package:flutter/material.dart';
 import 'package:syncfusion_flutter_calendar/calendar.dart';
 import '/constants.dart';
@@ -16,6 +21,7 @@ class ArcherAppointment extends Appointment {
     super.color = Colors.lightBlue,
     super.notes,
     super.location,
+    super.isAllDay = true,
     required this.manager, // 🏹 생성자에서 받기
   });
 }
@@ -173,6 +179,8 @@ class _ClubCalendarScreenState extends State<ClubCalendarScreen> {
     final TextEditingController locationController = TextEditingController();
     final TextEditingController contentController = TextEditingController();
 
+    bool isAllDay = true;
+
     DateTime startDate = selectedDate;
     DateTime endDate = selectedDate;
 
@@ -211,19 +219,43 @@ class _ClubCalendarScreenState extends State<ClubCalendarScreen> {
                     const Text("새 일정 만들기", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
                     const SizedBox(height: 15),
 
+                    // 💡 [신규 추가] 종일 여부 토글 스위치 (알림 설정 위에 배치 추천)
+                    SwitchListTile(
+                      title: const Text("종일 일정", style: TextStyle(fontWeight: FontWeight.bold)),
+                      value: isAllDay,
+                      activeThumbColor: const Color(0xFF166534),
+                      onChanged: (val) => setSheetState(() => isAllDay = val),
+                    ),
                     // 🏹 시작일 선택 행
                     ListTile(
-                      title: const Text("시작일"),
-                      trailing: Text("${startDate.year}-${startDate.month}-${startDate.day}"),
+                      title: const Text("시작 일시"),
+                      trailing: Text(isAllDay
+                        ? "${startDate.year}-${startDate.month}-${startDate.day}"
+                        : "${startDate.year}-${startDate.month}-${startDate.day} ${startDate.hour.toString().padLeft(2, '0')}:${startDate.minute.toString().padLeft(2, '0')}"
+                      ),
+                      //trailing: Text("${startDate.year}-${startDate.month}-${startDate.day}"),
                       onTap: () async {
-                        final DateTime? picked = await showDatePicker(
+                        final DateTime? pickedDate = await showDatePicker(
                           context: context,
                           initialDate: startDate,
                           firstDate: DateTime(2025),
                           lastDate: DateTime(2030),
                         );
-                        if (picked != null) {
-                          setSheetState(() => startDate = picked); // 시트 내부 UI 갱신
+                        if (pickedDate != null) {
+                          if (isAllDay) {
+                            setSheetState(() => startDate = pickedDate); // 시트 내부 UI 갱신
+                          } else {
+                            // 💡 종일이 아니면 날짜 선택 직후 시계(TimePicker)를 띄워줌
+                            if (!context.mounted) return;
+                            final TimeOfDay? pickedTime = await showTimePicker(
+                              context: context, initialTime: TimeOfDay.fromDateTime(startDate),
+                            );
+                            if (pickedTime != null) {
+                              setSheetState(() => startDate = DateTime(
+                                pickedDate.year, pickedDate.month, pickedDate.day, pickedTime.hour, pickedTime.minute,
+                              ));
+                            }
+                          }                          
                         }
                       },
                     ),
@@ -231,16 +263,33 @@ class _ClubCalendarScreenState extends State<ClubCalendarScreen> {
                     // 🏹 종료일 선택 행
                     ListTile(
                       title: const Text("종료일"),
-                      trailing: Text("${endDate.year}-${endDate.month}-${endDate.day}"),
+                      //trailing: Text("${endDate.year}-${endDate.month}-${endDate.day}"),
+                      trailing: Text(isAllDay
+                        ? "${endDate.year}-${endDate.month}-${endDate.day}"
+                        : "${endDate.year}-${endDate.month}-${endDate.day} ${endDate.hour.toString().padLeft(2, '0')}:${endDate.minute.toString().padLeft(2, '0')}"
+                      ),
                       onTap: () async {
-                        final DateTime? picked = await showDatePicker(
+                        final DateTime? pickedDate = await showDatePicker(
                           context: context,
                           initialDate: endDate,
                           firstDate: startDate, // 시작일보다 이전일 순 없음
                           lastDate: DateTime(2030),
                         );
-                        if (picked != null) {
-                          setSheetState(() => endDate = picked);
+                        if (pickedDate != null) {
+                          if (isAllDay) {
+                            setSheetState(() => startDate = pickedDate); // 시트 내부 UI 갱신
+                          } else {
+                            // 💡 종일이 아니면 날짜 선택 직후 시계(TimePicker)를 띄워줌
+                            if (!context.mounted) return;
+                            final TimeOfDay? pickedTime = await showTimePicker(
+                              context: context, initialTime: TimeOfDay.fromDateTime(endDate),
+                            );
+                            if (pickedTime != null) {
+                              setSheetState(() => endDate = DateTime(
+                                pickedDate.year, pickedDate.month, pickedDate.day, pickedTime.hour, pickedTime.minute,
+                              ));
+                            }
+                          }
                         }
                       },
                     ),
@@ -315,10 +364,15 @@ class _ClubCalendarScreenState extends State<ClubCalendarScreen> {
                             "location": locationController.text,
                             "manager": managerController.text,
                             "content": contentController.text,
-                            "start_date": startDate.toIso8601String().split('T')[0], // "2026-04-03"
-                            "end_date": endDate.toIso8601String().split('T')[0],
+                            "start_date": isAllDay
+                              ? startDate.toIso8601String().split('T')[0] // "2026-04-03"
+                              : startDate.toString().split('.')[0],
+                            "end_date": isAllDay
+                              ? endDate.toIso8601String().split('T')[0]
+                              : endDate.toString().split('.')[0],
                             "color": selectedColor.toARGB32(),  // 색상을 정수(int)로 저장
                             "use_alarm": useAlarm ? 1 : 0, // 알람 켜면 1, 끄면 0
+                            "is_all_day": isAllDay ? 1 : 0,
                           };
 
                           try {
@@ -368,6 +422,8 @@ class _ClubCalendarScreenState extends State<ClubCalendarScreen> {
     Color selectedColor = app.color;
     bool useAlarm = true; // DB 설계에 따라 app.useAlarm 등으로 변경 가능
 
+    bool isAllDay = app.isAllDay;
+
     // final List<Color> colorOptions = [
     //   const Color(0xFFE53935), const Color(0xFFFB8C00), const Color(0xFFFFEB3B),
     //   const Color(0xFF43A047), const Color(0xFF1E88E5), const Color(0xFF8E24AA),
@@ -402,22 +458,78 @@ class _ClubCalendarScreenState extends State<ClubCalendarScreen> {
 
                     const SizedBox(height: 20),
 
+                    // 💡 1. 종일 일정 토글 스위치 추가
+                    SwitchListTile(
+                      title: const Text("종일 일정", style: TextStyle(fontWeight: FontWeight.bold)),
+                      value: isAllDay,
+                      activeThumbColor: const Color(0xFF166534),
+                      onChanged: (val) {
+                        setSheetState(() => isAllDay = val);
+                      },
+                    ),
+
                     // 📅 일정 (시작일 ~ 종료일)
                     const Text("📅 일정 설정", style: TextStyle(fontWeight: FontWeight.bold)),
                     ListTile(
-                      title: const Text("시작일"),
-                      trailing: Text("${startDate.year}-${startDate.month}-${startDate.day}"),
+                      title: const Text("시작 일시"),
+                      trailing: Text(isAllDay 
+                        ? "${startDate.year}-${startDate.month}-${startDate.day}"
+                        : "${startDate.year}-${startDate.month}-${startDate.day} ${startDate.hour.toString().padLeft(2, '0')}:${startDate.minute.toString().padLeft(2, '0')}"),
                       onTap: () async {
-                        final picked = await showDatePicker(context: context, initialDate: startDate, firstDate: DateTime(2025), lastDate: DateTime(2030));
-                        if (picked != null) setSheetState(() => startDate = picked);
+                        final DateTime? pickedDate = await showDatePicker(
+                          context: context,
+                          initialDate: startDate,
+                          firstDate: DateTime(2025),
+                          lastDate: DateTime(2030),
+                        );
+                        if (pickedDate != null) {
+                          if (isAllDay) {
+                            setSheetState(() => startDate = pickedDate);
+                          } else {
+                            if (!context.mounted) return;
+                            final TimeOfDay? pickedTime = await showTimePicker(
+                              context: context,
+                              initialTime: TimeOfDay.fromDateTime(startDate),
+                            );
+                            if (pickedTime != null) {
+                              setSheetState(() => startDate = DateTime(
+                                pickedDate.year, pickedDate.month, pickedDate.day,
+                                pickedTime.hour, pickedTime.minute,
+                              ));
+                            }
+                          }
+                        }
                       },
                     ),
                     ListTile(
-                      title: const Text("종료일"),
-                      trailing: Text("${endDate.year}-${endDate.month}-${endDate.day}"),
+                      title: const Text("종료 일시"),
+                      trailing: Text(isAllDay 
+                        ? "${endDate.year}-${endDate.month}-${endDate.day}"
+                        : "${endDate.year}-${endDate.month}-${endDate.day} ${endDate.hour.toString().padLeft(2, '0')}:${endDate.minute.toString().padLeft(2, '0')}"),
                       onTap: () async {
-                        final picked = await showDatePicker(context: context, initialDate: endDate, firstDate: startDate, lastDate: DateTime(2030));
-                        if (picked != null) setSheetState(() => endDate = picked);
+                        final DateTime? pickedDate = await showDatePicker(
+                          context: context,
+                          initialDate: endDate,
+                          firstDate: DateTime(2025),
+                          lastDate: DateTime(2030),
+                        );
+                        if (pickedDate != null) {
+                          if (isAllDay) {
+                            setSheetState(() => endDate = pickedDate);
+                          } else {
+                            if (!context.mounted) return;
+                            final TimeOfDay? pickedTime = await showTimePicker(
+                              context: context,
+                              initialTime: TimeOfDay.fromDateTime(endDate),
+                            );
+                            if (pickedTime != null) {
+                              setSheetState(() => endDate = DateTime(
+                                pickedDate.year, pickedDate.month, pickedDate.day,
+                                pickedTime.hour, pickedTime.minute,
+                              ));
+                            }
+                          }
+                        }
                       },
                     ),
 
@@ -477,10 +589,15 @@ class _ClubCalendarScreenState extends State<ClubCalendarScreen> {
                             "manager": managerController.text,
                             "location": locationController.text,
                             "content": contentController.text,
-                            "start_date": startDate.toIso8601String().split('T')[0],
-                            "end_date": endDate.toIso8601String().split('T')[0],
+                            "start_date": isAllDay 
+                              ? startDate.toIso8601String().split('T')[0] 
+                              : startDate.toString().split('.')[0],
+                            "end_date": isAllDay 
+                              ? endDate.toIso8601String().split('T')[0] 
+                              : endDate.toString().split('.')[0],
                             "color": selectedColor.toARGB32(), 
                             "use_alarm": useAlarm ? 1 : 0,
+                            "is_all_day": isAllDay ? 1 : 0,
                           };
                           await _updateSchedule(updateData);
                           if (!context.mounted) return; // 화면이 아직 떠 있는지 체크
@@ -519,20 +636,36 @@ class _ClubCalendarScreenState extends State<ClubCalendarScreen> {
       // 만약 데이터가 String으로 오면 int.parse를 쓰고, 아니면 바로 형변환 합니다.
       int colorValue = int.tryParse(item['color'].toString()) ?? 4281358132; // 기본값(초록)
 
-      // 만약 날짜 뒤에 T00:00:00.000 같은 찌꺼기가 붙어있다면, 'T'를 기준으로 앞의 날짜(년-월-일)만 쏙 가공합니다.
-      String startDateStr = item['start_date'].toString().split('T')[0];
-      String endDateStr = item['end_date'].toString().split('T')[0];
+      // 💡 1. DB에서 종일 여부를 가져옵니다 (기존 데이터나 null이면 종일(1)로 간주)
+      bool isAllDay = (item['is_all_day'] == null || item['is_all_day'] == 1);
+
+      // 💡 2. 파싱 로직 분기
+      DateTime parsedStart;
+      DateTime parsedEnd;
+
+      if (isAllDay) {
+        // 만약 날짜 뒤에 T00:00:00.000 같은 찌꺼기가 붙어있다면, 'T'를 기준으로 앞의 날짜(년-월-일)만 쏙 가공합니다.
+        String startDateStr = item['start_date'].toString().split('T')[0];
+        String endDateStr = item['end_date'].toString().split('T')[0];
+        parsedStart = DateTime.parse(startDateStr);
+        parsedEnd = DateTime.parse(endDateStr);
+      } else {
+        parsedStart = DateTime.parse(item['start_date'].toString().replaceFirst(' ', 'T'));
+        parsedEnd = DateTime.parse(item['end_date'].toString().replaceFirst(' ', 'T'));
+      }
+      
 
       return ArcherAppointment(
         id: item['id'].toString(),
         subject: item['title'] ?? '제목 없음',
-        startTime: DateTime.parse(startDateStr),
-        endTime: DateTime.parse(endDateStr),
+        startTime: parsedStart,
+        endTime: parsedEnd,
         location: item['location'] ?? '',
         manager: item['manager'] ?? '',
         notes: item['content'] ?? '',
         // 🎨 숫자 값을 그대로 Color 객체로 변환!
         color: Color(colorValue), 
+        isAllDay: isAllDay,
       );
     }).toList();
   }  
@@ -648,11 +781,18 @@ class _ClubCalendarScreenState extends State<ClubCalendarScreen> {
                   ),
                   const SizedBox(height: 10),
                   
-                  // 선택된 일정 개수만큼 카드를 자동으로 생성
-                  //_buildDetailCard("필드 훈련", "김코치", "제주 양궁장", "오전 9시 70m 사로 집합"), << 이건 테스트용 하드코딩
+                  // 선택된 일정 개수만큼 카드를 자동으로 생성                  
                   ..._selectedAppointments.map((app) {
-                    String startDate = app.startTime.toString().split(' ')[0];
-                    String endDate = app.endTime.toString().split(' ')[0];                    
+                    // 💡 종일 여부에 따라 텍스트 다르게 가공
+                    String formatDateTime(DateTime dt, bool allDay) {
+                      String datePart = "${dt.year}-${dt.month.toString().padLeft(2, '0')}-${dt.day.toString().padLeft(2, '0')}";
+                      if (allDay) return datePart;
+                      String timePart = "${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}";
+                      return "$datePart $timePart";
+                    }
+
+                    String startDate = formatDateTime(app.startTime, app.isAllDay);
+                    String endDate = formatDateTime(app.endTime, app.isAllDay);                    
                     
                     return _buildDetailCard(
                       app.subject,                    

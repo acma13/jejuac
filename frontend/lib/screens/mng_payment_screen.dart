@@ -56,7 +56,9 @@ class PaymentInfo {
       'amount': amount,
       'is_paid': isPaid ? 1 : 0, // 서버 DB 타입에 맞춰 변환[cite: 5]
       'note': note,
-      'target_month': payItem == "장비료" ? null : targetMonth,
+      // modify : 26.06.09
+      // 장비료도 월 선택 가능하도록 변경
+      'target_month': targetMonth,
     };
   }
 }
@@ -78,6 +80,34 @@ class _MngPaymentScreenState extends State<MngPaymentScreen> {
   List<Map<String, dynamic>> payments = [];
   List<Member> _activeMembers = [];
   bool _isLoading = false;
+
+  // 2. 상태 변수
+  String searchQuery = "";
+  String selectedPaidStatus = "전체";
+  bool isAscending = true;
+  int sortColumnIndex = 0;
+  // modify : 26.06.09
+  // 필터링 로직 추가 : 결제항목에 따른 필터링  
+  String selectedPayItemFilter = "전체"; 
+  final List<String> payItemOptions = ["전체", "수업료", "장비료"];
+
+  // 3. 필터링 로직
+  List<Map<String, dynamic>> get _filteredPayments {
+    return payments.where((p) {
+      final nameMatch = (p['name'] ?? "").toString().contains(searchQuery);
+      bool statusMatch = true;
+      if (selectedPaidStatus == "완납") statusMatch = (p['is_paid'] == 1 || p['is_paid'] == true);
+      if (selectedPaidStatus == "미납") statusMatch = (p['is_paid'] == 0 || p['is_paid'] == false);
+
+      // [신규 추가] 결제 항목 (수업료/장비료) 매칭
+      bool itemMatch = true;
+      if (selectedPayItemFilter != "전체") {
+        itemMatch = p['pay_item'] == selectedPayItemFilter;
+      }
+
+      return nameMatch && statusMatch && itemMatch;
+    }).toList();
+  }
   
   @override
   void initState() {
@@ -162,7 +192,9 @@ class _MngPaymentScreenState extends State<MngPaymentScreen> {
       "amount": finalAmount,        // int 타입으로 전송
       "is_paid": isPaid,        // bool로 보내면 서버에서 0/1 처리
       "note": note,
-      "target_month": (selectedItem == "장비료") ? "" : targetMonth,
+      // modify : 26.06.09
+      // 장비료도 월 선택 가능하도록 변경
+      "target_month": targetMonth,
       "created_by": widget.userId,
     };
 
@@ -187,24 +219,7 @@ class _MngPaymentScreenState extends State<MngPaymentScreen> {
     } catch (e) {
       debugPrint("저장 오류: $e");
     }
-  }
-
-  // 2. 상태 변수
-  String searchQuery = "";
-  String selectedPaidStatus = "전체";
-  bool isAscending = true;
-  int sortColumnIndex = 0;
-
-  // 3. 필터링 로직
-  List<Map<String, dynamic>> get _filteredPayments {
-    return payments.where((p) {
-      final nameMatch = (p['name'] ?? "").toString().contains(searchQuery);
-      bool statusMatch = true;
-      if (selectedPaidStatus == "완납") statusMatch = (p['is_paid'] == 1 || p['is_paid'] == true);
-      if (selectedPaidStatus == "미납") statusMatch = (p['is_paid'] == 0 || p['is_paid'] == false);
-      return nameMatch && statusMatch;
-    }).toList();
-  }
+  }  
     
   Future<void> _deletePayment(dynamic id) async {
     try {
@@ -318,9 +333,9 @@ class _MngPaymentScreenState extends State<MngPaymentScreen> {
                               onTap: () => _showPaymentDialog(payment: info, isEdit: true),
                               child: ListTile(
                                 title: Text(info.name, style: const TextStyle(fontWeight: FontWeight.bold)),
-                                subtitle: Text(info.payItem == "장비료"
-                                  ? info.payItem
-                                  : "${info.targetMonth} / ${info.payItem}"),
+                                // modify : 26.06.09
+                                // 장비료도 월 선택 가능하도록 변경
+                                subtitle: Text("${info.targetMonth} / ${info.payItem}"),
                                 trailing: Row(
                                   mainAxisSize: MainAxisSize.min,
                                   children: [
@@ -375,8 +390,15 @@ class _MngPaymentScreenState extends State<MngPaymentScreen> {
     // 현재 날짜 기준 정보 추출
     DateTime now = DateTime.now();
     
+    
+    // modify: 26.06.09
+    // 기존에 데이터가 없는 경우 수정창이 안뜨는 에러 수정
     // 기존 데이터가 있으면 해당 날짜를, 없으면 현재 날짜를 기본값으로 사용
-    String targetMonthStr = isEdit ? (payment!.targetMonth ?? DateFormat('yyyy-MM').format(now)) : DateFormat('yyyy-MM').format(now);
+    // String targetMonthStr = isEdit ? (payment!.targetMonth ?? DateFormat('yyyy-MM').format(now)) : DateFormat('yyyy-MM').format(now);
+    String targetMonthStr = DateFormat('yyyy-MM').format(now);
+    if (isEdit && payment?.targetMonth != null && payment!.targetMonth!.isNotEmpty) {
+      targetMonthStr = payment.targetMonth!;
+    }
     
     // 연도와 월 분리 (예: "2026-04" -> "2026", "04")
     String localYear = targetMonthStr.split('-')[0];
@@ -484,80 +506,82 @@ class _MngPaymentScreenState extends State<MngPaymentScreen> {
                       ),
                     ),
                     const SizedBox(height: 20),
-
+                    
+                    // modify : 26.06.09
+                    // 장비료도 월 선택 가능하도록 변경
                     // 📅 대상연월 선택 섹션
-                    if (selectedItem != "장비료") ...[
-                      const Text("결제 대상 연월", style: TextStyle(fontWeight: FontWeight.bold)),
-                      const SizedBox(height: 8),
-                      Row(
-                        children: [
-                          // 연도 선택 (SegmentedButton)
-                          Expanded(
-                            child: Row(
-                              children: [
-                                Expanded(
-                                  child: DropdownButtonFormField<String>(                                  
-                                    initialValue: localYear,
-                                    decoration: const InputDecoration(
-                                      border: OutlineInputBorder(),
-                                      contentPadding: EdgeInsets.symmetric(horizontal: 10),
-                                    ),
-                                    // 숫자만 들어가게 설정
-                                    items: yearOptions.map((y) => DropdownMenuItem(
-                                      value: y, 
-                                      child: Text(y), 
-                                    )).toList(),
-                                    onChanged: (val) {
-                                      if (val != null) {
-                                        setBottomSheetState(() {
-                                          localYear = val; // 변수 값을 변경하고 UI를 다시 그립니다.
-                                        });
-                                      }
-                                    },
+                    //if (selectedItem != "장비료") ...[
+                    const Text("결제 대상 연월", style: TextStyle(fontWeight: FontWeight.bold)),
+                    const SizedBox(height: 8),
+                    Row(
+                      children: [
+                        // 연도 선택 (SegmentedButton)
+                        Expanded(
+                          child: Row(
+                            children: [
+                              Expanded(
+                                child: DropdownButtonFormField<String>(                                  
+                                  initialValue: localYear,
+                                  decoration: const InputDecoration(
+                                    border: OutlineInputBorder(),
+                                    contentPadding: EdgeInsets.symmetric(horizontal: 10),
                                   ),
+                                  // 숫자만 들어가게 설정
+                                  items: yearOptions.map((y) => DropdownMenuItem(
+                                    value: y, 
+                                    child: Text(y), 
+                                  )).toList(),
+                                  onChanged: (val) {
+                                    if (val != null) {
+                                      setBottomSheetState(() {
+                                        localYear = val; // 변수 값을 변경하고 UI를 다시 그립니다.
+                                      });
+                                    }
+                                  },
                                 ),
-                                const SizedBox(width: 8),
-                                const Text("년"), // 연도 옆에 '년' 표시
-                              ],
-                            ),
+                              ),
+                              const SizedBox(width: 8),
+                              const Text("년"), // 연도 옆에 '년' 표시
+                            ],
                           ),
-                          const SizedBox(width: 15),
-                          
-                          // --- 월 선택 드랍다운 ---
-                          Expanded(
-                            child: Row(
-                              children: [
-                                Expanded(
-                                  child: DropdownButtonFormField<String>(                                  
-                                    initialValue: localMonth,
-                                    decoration: const InputDecoration(
-                                      border: OutlineInputBorder(),
-                                      contentPadding: EdgeInsets.symmetric(horizontal: 10),
-                                    ),
-                                    // 01~12 형식으로 생성
-                                    items: List.generate(12, (i) => (i + 1).toString().padLeft(2, '0'))
-                                        .map((m) => DropdownMenuItem(
-                                          value: m, 
-                                          child: Text(int.parse(m).toString()), // 숫자로 표시
-                                        )).toList(),
-                                    onChanged: (val) {
-                                      if (val != null) {
-                                        setBottomSheetState(() {
-                                          localMonth = val; // 변수 값을 변경하고 UI를 다시 그립니다.
-                                        });
-                                      }
-                                    },
+                        ),
+                        const SizedBox(width: 15),
+                        
+                        // --- 월 선택 드랍다운 ---
+                        Expanded(
+                          child: Row(
+                            children: [
+                              Expanded(
+                                child: DropdownButtonFormField<String>(                                  
+                                  initialValue: localMonth,
+                                  decoration: const InputDecoration(
+                                    border: OutlineInputBorder(),
+                                    contentPadding: EdgeInsets.symmetric(horizontal: 10),
                                   ),
+                                  // 01~12 형식으로 생성
+                                  items: List.generate(12, (i) => (i + 1).toString().padLeft(2, '0'))
+                                      .map((m) => DropdownMenuItem(
+                                        value: m, 
+                                        child: Text(int.parse(m).toString()), // 숫자로 표시
+                                      )).toList(),
+                                  onChanged: (val) {
+                                    if (val != null) {
+                                      setBottomSheetState(() {
+                                        localMonth = val; // 변수 값을 변경하고 UI를 다시 그립니다.
+                                      });
+                                    }
+                                  },
                                 ),
-                                const SizedBox(width: 8),
-                                const Text("월"), // 월 옆에 '월' 표시
-                              ],
-                            ),
+                              ),
+                              const SizedBox(width: 8),
+                              const Text("월"), // 월 옆에 '월' 표시
+                            ],
                           ),
-                        ],
-                      ),                    
-                      const SizedBox(height: 20),
-                    ],
+                        ),
+                      ],
+                    ),                    
+                    const SizedBox(height: 20),
+                    // ],
 
                     // 💳 결제 방법 (🎯 카드/현금 라디오 버튼 스타일)
                     const Text("결제 방법", style: TextStyle(fontWeight: FontWeight.bold)),
@@ -668,44 +692,84 @@ class _MngPaymentScreenState extends State<MngPaymentScreen> {
   Widget _buildSearchAndFilterBar() {
     return Column(
       children: [
-        Padding(
-          padding: const EdgeInsets.all(12.0),
-          child: TextField(
-            decoration: InputDecoration(
-              hintText: "이름으로 검색",
-              prefixIcon: const Icon(Icons.search),
-              filled: true,
-              fillColor: Colors.grey[100],
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(30),
-                borderSide: BorderSide.none,
+        // modify : 26.06.09
+        // 검색창 중복으로 제거함.
+        // Padding(
+        //   padding: const EdgeInsets.all(12.0),
+        //   child: TextField(
+        //     decoration: InputDecoration(
+        //       hintText: "이름으로 검색",
+        //       prefixIcon: const Icon(Icons.search),
+        //       filled: true,
+        //       fillColor: Colors.grey[100],
+        //       border: OutlineInputBorder(
+        //         borderRadius: BorderRadius.circular(30),
+        //         borderSide: BorderSide.none,
+        //       ),
+        //     ),
+        //     onChanged: (value) => setState(() => searchQuery = value),
+        //   ),
+        // ),
+        const SizedBox(height: 5),
+        // 🛠️ 2단 교차 필터 영역 (항목 필터 + 상태 필터)
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // 1층: 결제 항목 필터 (전체/수업료/장비료)
+            SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              padding: const EdgeInsets.only(left: 12, right: 12, top: 4, bottom: 4),
+              child: Row(
+                children: payItemOptions.map((item) {
+                  final isSelected = selectedPayItemFilter == item;
+                  return Padding(
+                    padding: const EdgeInsets.only(right: 8),
+                    child: ChoiceChip(
+                      label: Text(item),
+                      selected: isSelected,
+                      // 💡 1층은 블루그레이 톤으로 주어 2층과 시각적으로 분리합니다.
+                      selectedColor: Colors.blueGrey, 
+                      checkmarkColor: Colors.white,
+                      labelStyle: TextStyle(
+                        color: isSelected ? Colors.white : Colors.black87,
+                        fontWeight: isSelected ? FontWeight.bold : FontWeight.normal
+                      ),
+                      onSelected: (val) {
+                        if (val) setState(() => selectedPayItemFilter = item);
+                      },
+                    ),
+                  );
+                }).toList(),
               ),
             ),
-            onChanged: (value) => setState(() => searchQuery = value),
-          ),
-        ),
-        // 완납/미납 필터 칩
-        SingleChildScrollView(
-          scrollDirection: Axis.horizontal,
-          padding: const EdgeInsets.only(left: 12, right: 12, bottom: 8),
-          child: Row(
-            children: ["전체", "완납", "미납"].map((status) {
-              final isSelected = selectedPaidStatus == status;
-              return Padding(
-                padding: const EdgeInsets.only(right: 8),
-                child: ChoiceChip(
-                  label: Text(status),
-                  selected: isSelected,
-                  selectedColor: const Color(0xFF166534),
-                  checkmarkColor: Colors.white,
-                  labelStyle: TextStyle(color: isSelected ? Colors.white : Colors.black),
-                  onSelected: (val) {
-                    if (val) setState(() => selectedPaidStatus = status);
-                  },
-                ),
-              );
-            }).toList(),
-          ),
+            
+            // 2층: 완납/미납 상태 필터 (기존 코드와 거의 동일, 패딩만 살짝 조절)
+            SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              padding: const EdgeInsets.only(left: 12, right: 12, bottom: 8),
+              child: Row(
+                children: ["전체", "완납", "미납"].map((status) {
+                  final isSelected = selectedPaidStatus == status;
+                  return Padding(
+                    padding: const EdgeInsets.only(right: 8),
+                    child: ChoiceChip(
+                      label: Text(status),
+                      selected: isSelected,
+                      selectedColor: const Color(0xFF166534), // 기존 메인 그린 컬러
+                      checkmarkColor: Colors.white,
+                      labelStyle: TextStyle(
+                        color: isSelected ? Colors.white : Colors.black87,
+                        fontWeight: isSelected ? FontWeight.bold : FontWeight.normal
+                      ),
+                      onSelected: (val) {
+                        if (val) setState(() => selectedPaidStatus = status);
+                      },
+                    ),
+                  );
+                }).toList(),
+              ),
+            ),
+          ],
         ),
         const Divider(height: 1),
       ],

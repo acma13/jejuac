@@ -73,6 +73,17 @@ def init_db():
             )
         """)
 
+        # moidfy : 26.06.09
+        # 일정 테이블에 "종일여부" 컬럼 추가 (일정에 시간 추가하기 위함)        
+
+        c.execute("PRAGMA table_info(schedules);")
+        columns = [row[1] for row in c.fetchall()]
+
+        if "is_all_day" not in columns:
+            print("🔧 schedules 테이블에 is_all_day 컬럼이 없어서 새로 추가합니다.")
+            # 기본값(DEFAULT)을 1로 주면 기존 구 데이터들은 자동으로 '종일 일정' 처리가 됩니다.
+            c.execute("ALTER TABLE schedules ADD COLUMN is_all_day INTEGER DEFAULT 1;")
+
         # 4. 회원관리 테이블 생성
         c.execute("""
             CREATE TABLE IF NOT EXISTS members (
@@ -489,8 +500,8 @@ def insert_club_schedule(p):
             
             query = """
                 INSERT INTO schedules 
-                (userid, title, location, manager, start_date, end_date, content, color, use_alarm)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                (userid, title, location, manager, start_date, end_date, content, color, use_alarm, is_all_day)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """
             
             c.execute(query, (
@@ -502,7 +513,8 @@ def insert_club_schedule(p):
                 p.end_date,
                 p.content,
                 p.color,
-                p.use_alarm
+                p.use_alarm,
+                p.is_all_day
             ))
             
             # 2. 변경사항 확정
@@ -545,7 +557,8 @@ def update_schedule(p):
                     end_date = ?,
                     content = ?,
                     color = ?,
-                    use_alarm = ?                
+                    use_alarm = ?,
+                    is_all_day = ?                
                 where id = ?
             """
 
@@ -558,6 +571,7 @@ def update_schedule(p):
                 p.content,
                 p.color,
                 p.use_alarm,
+                p.is_all_day,
                 p.id
             ))
 

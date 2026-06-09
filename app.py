@@ -370,6 +370,7 @@ class scheduleRequest(BaseModel):
     content: Optional[str] = None
     color: int
     use_alarm: bool
+    is_all_day: int
 
 class deleteScheduleRequest(BaseModel):
     id: str
