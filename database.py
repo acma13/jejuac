@@ -309,6 +309,18 @@ def update_user_profile(userid, name, phone, password=None):
         except Exception as e:
             print(f"에러 발생 상세 내역: {e}")
             return False
+
+def update_password_hash(userid, hashed_password):
+    """로그인 성공 시 기존 SHA-256 비밀번호를 Argon2 해시로 전환합니다."""
+    with get_connection() as conn:
+        try:
+            c = conn.cursor()
+            c.execute("UPDATE users SET password = ? WHERE userid = ?", (hashed_password, userid))
+            conn.commit()
+            return c.rowcount > 0
+        except Exception as e:
+            print(f"Password Hash Upgrade Error: {e}")
+            return False
         
 def register_user_with_invitation(userid, password, name, email, phone):
     """
@@ -839,6 +851,7 @@ def add_equipment_db(p):
                         VALUES (?, ?, ?, ?, ?)""", 
                     (p.name, p.spec, p.location, p.note, p.stock))
             conn.commit()
+            return True
         except Exception as e:
             # 에러 발생 시 되돌리기
             conn.rollback()
@@ -857,7 +870,7 @@ def update_equipment_db(p):
             """
             c.execute(query, (p.name, p.spec, p.location, p.note, p.id))
             conn.commit()
-            return True            
+            return c.rowcount > 0
         except Exception as e:
             # 에러 발생 시 되돌리기
             conn.rollback()

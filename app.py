@@ -49,7 +49,10 @@ async def read_index():
 # 다른 도메인(플러터 웹)에서 이 파이썬 서버에 접근할 수 있게 해줍니다.
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # 모든 곳에서 접속 허용 (개발용)
+    allow_origins=["https://jejuac.duckdns.org"],  # 모든 곳에서 접속 허용 시 "*"
+
+    allow_origin_regex=r"^http://(localhost|127\.0\.0\.1)(:\d+)?$",
+    
     allow_credentials=True,
     allow_methods=["*"],  # 모든 HTTP 메서드 허용 (GET, POST 등)
     allow_headers=["*"],
@@ -229,11 +232,6 @@ def register_user(req: RegisterRequest):
     )
     
     return {"success": success, "message": message}
-
-# 7. 기본 경로 확인 (테스트용)
-@app.get("/")
-def read_root():
-    return {"status": "running", "message": "제주양궁클럽 API 서버가 작동 중입니다."}
 
 # 가입자 초대 목록 및 추가 관련 API
 # [API 1] 가입 허용 이메일 목록 가져오기
@@ -782,12 +780,14 @@ async def api_add_equipment(req: EquipmentAddRequest):
         return {"success": False, "message": str(e)}
 
 # 4. 장비 수정
-@app.post("/api/update_equipment/equipmentId}")
+@app.post("/api/update_equipment")
 async def api_update_equipment(req: EquipmentUpdateRequest):
     # update_equipment_db(data['id'], data)    
     try:
         result = db.update_equipment_db(req)
-        return {"success": result}
+        if result:
+            return {"success": True}
+        return {"success": False, "message": "Equipment not found or no changes applied."}
     except Exception as e:
         print(f"Update Content Error: {e}")
         return {"success": False, "message": str(e)}
